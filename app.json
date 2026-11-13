@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "PokéAsset",
+    "slug": "pokeasset",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07090d",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yourname.pokeasset",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PokéAsset uses the camera to scan cards, sealed products and grading photos.",
+        "NSPhotoLibraryUsageDescription": "PokéAsset lets you pick card photos from your library."
+      }
+    },
+    "plugins": ["expo-image-picker"]
+  }
+}
