@@ -466,4 +466,4 @@ const s = StyleSheet.create({
   },
 });
 
-export const money = { fontFamily: mono, color: colors.text, fontWeight: '700' as cons
+export const money = { fontFamily: mono, color: colors.text, fontWeight: '700' as const };
