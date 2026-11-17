@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "PokéAsset",
+    "slug": "pokeasset",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#07090d",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yourname.pokeasset",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PokéAsset uses the camera to scan cards, sealed products and grading photos.",
+        "NSPhotoLibraryUsageDescription": "PokéAsset lets you pick card photos from your library."
+      }
+    },
+    "plugins": [
+      "expo-image-picker"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "PokéAsset",
+      "shortName": "PokéAsset",
+      "description": "Pokémon card portfolio tracker with market prices, PSA graded values and price history.",
+      "themeColor": "#07090d",
+      "backgroundColor": "#07090d"
+    },
+    "icon": "./assets/icon.png",
+    "description": "Pokémon card portfolio tracker with market prices, PSA graded values and price history."
+  }
+}
