@@ -162,7 +162,7 @@ export default function Trade() {
               fontFamily: mono,
               fontSize: 30,
               fontWeight: '700',
-              color: diff === 0 ? colors.text : diff > 0 ? '#3ecf8e' : colors.red,
+              color: diff === 0 ? colors.text : diff > 0 ? colors.green : colors.red,
             }}
           >
             {diff >= 0 ? '+' : '-'}${Math.abs(diff).toFixed(2)}

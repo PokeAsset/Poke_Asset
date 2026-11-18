@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { colors, radius } from '../theme';
+import { colors, radius, themed } from '../theme';
 import { Body, Chip, Loading, Panel, Screen, SearchBox } from '../ui';
-import { featuredCards, searchCards } from '../api';
+import { featuredCards, formatMoney, formatPct, formatSigned, searchCards } from '../api';
+import { combinedTotals } from '../portfolio';
 import { Card } from '../types';
 import { useStore } from '../store';
 import { CardRow, CardTile } from './CardDetail';
@@ -39,7 +40,9 @@ export function useCardSearch() {
 
 export default function Home() {
   const nav = useNavigation<any>();
-  const { recent } = useStore();
+  const { recent, owned, sealed } = useStore();
+  const totals = combinedTotals(owned, sealed);
+  const copies = totals.singles.copies + totals.sealed.items;
   const search = useCardSearch();
   const [featured, setFeatured] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +63,7 @@ export default function Home() {
     go: () => void,
     hot?: boolean,
   ) => (
-    <Pressable key={title} onPress={go} style={[h.tool, hot && { borderColor: '#6b5320' }]}>
+    <Pressable key={title} onPress={go} style={[h.tool, hot && { borderColor: colors.tintGoldBorder }]}>
       <View style={h.toolIcon}>
         <Ionicons name={icon} size={24} color={colors.amber} />
       </View>
@@ -99,6 +102,20 @@ export default function Home() {
           ))}
         </View>
       </Panel>
+
+      {owned.length + sealed.length > 0 ? (
+        <Pressable onPress={() => nav.navigate('Tabs', { screen: 'Collection' })}>
+          <Panel style={{ gap: 6 }}>
+            <Text style={{ color: colors.muted, letterSpacing: 3, fontWeight: '700', fontSize: 13 }}>MY PORTFOLIO</Text>
+            <Text style={{ color: colors.text, fontSize: 30, fontWeight: '800' }}>{formatMoney(totals.value)}</Text>
+            <Text style={{ color: totals.pnl >= 0 ? colors.amber : colors.red }}>
+              {totals.pricedCost > 0
+                ? `${formatSigned(totals.pnl)} (${formatPct(totals.pnlPct)}) · ${copies} items`
+                : `${copies} items`}
+            </Text>
+          </Panel>
+        </Pressable>
+      ) : null}
 
       {search.text.trim() ? (
         <Panel>
@@ -173,15 +190,15 @@ export default function Home() {
   );
 }
 
-const h = StyleSheet.create({
+const h = themed(() => StyleSheet.create({
   hero: { color: colors.text, fontSize: 42, fontWeight: '800', letterSpacing: -1 },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: '#6b5320',
-    backgroundColor: '#1a1608',
+    borderColor: colors.tintGoldBorder,
+    backgroundColor: colors.tintGold,
     borderRadius: radius.pill,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -203,7 +220,7 @@ const h = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#1a1608',
+    backgroundColor: colors.tintGold,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -211,4 +228,4 @@ const h = StyleSheet.create({
   toolSub: { color: colors.muted, fontSize: 14, marginTop: 2 },
   sectionTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
   cards: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-});
+}));

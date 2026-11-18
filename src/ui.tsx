@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
+  useWindowDimensions,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,18 +18,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, mono, radius, titleGradient } from './theme';
+import { colors, mono, radius, titleGradient, themed } from './theme';
 import { useStore } from './store';
+import { useThemeMode } from './themeMode';
+
+/** Message box that also works in the browser (Alert.alert does nothing on web). */
+export function notify(title: string, message?: string) {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.alert(message ? `${title}\n\n${message}` : title);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 
 /* ---------- gradient title (per-character colour interpolation) ---------- */
 
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 function mix(t: number): string {
-  const seg = t * (titleGradient.length - 1);
-  const i = Math.min(Math.floor(seg), titleGradient.length - 2);
+  const g = titleGradient();
+  const seg = t * (g.length - 1);
+  const i = Math.min(Math.floor(seg), g.length - 2);
   const f = seg - i;
-  const a = hex(titleGradient[i]);
-  const b = hex(titleGradient[i + 1]);
+  const a = hex(g[i]);
+  const b = hex(g[i + 1]);
   return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`;
 }
 
@@ -71,15 +85,20 @@ export function Btn({
   icon,
   onPress,
   kind = 'ghost',
+  disabled,
 }: {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
   kind?: 'gold' | 'ghost';
+  disabled?: boolean;
 }) {
   const gold = kind === 'gold';
   return (
-    <Pressable onPress={onPress} style={[s.btn, gold ? s.btnGold : s.btnGhost]}>
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      style={[s.btn, gold ? s.btnGold : s.btnGhost, disabled && { opacity: 0.5 }]}
+    >
       {icon ? <Ionicons name={icon} size={18} color={gold ? '#1a1405' : colors.text} /> : null}
       <Text style={[s.btnText, { color: gold ? '#1a1405' : colors.text }]}>{label}</Text>
     </Pressable>
@@ -222,19 +241,53 @@ export function Select({
 
 /* ---------- photo picker slot ---------- */
 
+export type PhotoData = { uri: string; base64: string; mime: string };
+
+function toPhoto(asset: ImagePicker.ImagePickerAsset): PhotoData | null {
+  let b64 = asset.base64 ?? '';
+  let mime = asset.mimeType ?? 'image/jpeg';
+  if (!b64 && asset.uri.startsWith('data:')) {
+    const m = /^data:([^;]+);base64,(.*)$/.exec(asset.uri);
+    if (m) {
+      mime = m[1];
+      b64 = m[2];
+    }
+  }
+  return b64 ? { uri: asset.uri, base64: b64, mime } : null;
+}
+
+/** Photo from the camera or library. base64 is kept so the photo can be sent to the vision service. */
 export function usePhoto() {
-  const [uri, setUri] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<PhotoData | null>(null);
+  const [error, setError] = useState('');
+  const take = (r: ImagePicker.ImagePickerResult) => {
+    if (r.canceled) return;
+    const p = toPhoto(r.assets[0]);
+    if (p) {
+      setPhoto(p);
+      setError('');
+    } else {
+      setError('That photo could not be read. Try another one.');
+    }
+  };
   const choose = async () => {
-    const lib = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!lib.canceled) setUri(lib.assets[0].uri);
+    try {
+      take(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5, base64: true }));
+    } catch {
+      setError('Could not open the photo library.');
+    }
   };
   const shoot = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return;
-    const r = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-    if (!r.canceled) setUri(r.assets[0].uri);
+    try {
+      if (Platform.OS === 'web') return choose();
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) return setError('Camera permission is off. Turn it on in Settings, or choose a photo.');
+      take(await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true }));
+    } catch {
+      setError('Could not open the camera.');
+    }
   };
-  return { uri, choose, shoot, clear: () => setUri(null) };
+  return { uri: photo?.uri ?? null, photo, error, choose, shoot, clear: () => setPhoto(null) };
 }
 
 export function PhotoSlot({
@@ -275,34 +328,46 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const nav = useNavigation<any>();
   const { setMenuOpen } = useStore();
+  const theme = useThemeMode();
   const icon = (name: keyof typeof Ionicons.glyphMap, onPress: () => void, hot?: boolean) => (
     <Pressable onPress={onPress} style={[s.hIcon, hot && s.hIconHot]}>
       <Ionicons name={name} size={22} color={hot ? colors.amber : colors.text} />
     </Pressable>
   );
   const Body = scroll ? ScrollView : View;
+  const { width } = useWindowDimensions();
+  const narrow = width < 520;
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={s.header}>
-        <Pressable style={s.logoRow} onPress={() => nav.navigate('Tabs', { screen: 'Home' })}>
-          <View style={s.logo}>
-            <View style={s.logoBand} />
-            <View style={s.logoDot} />
-          </View>
-          <Text style={s.brand}>PokéAsset</Text>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top, width: '100%', overflow: 'hidden' }}>
+      <View style={[s.header, narrow && { paddingHorizontal: 12, paddingVertical: 10 }]}>
+        <Pressable style={[s.logoRow, { flexShrink: 1, minWidth: 0 }]} onPress={() => nav.navigate('Tabs', { screen: 'Home' })}>
+          <Image source={require('../assets/logo.png')} style={{ width: narrow ? 34 : 40, height: narrow ? 34 : 40, borderRadius: 9 }} />
+          <Text style={[s.brand, narrow && { fontSize: 18 }]} numberOfLines={1}>
+            PokéAsset
+          </Text>
         </Pressable>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {icon('notifications-outline', () => nav.navigate('Tabs', { screen: 'Alerts' }))}
-          {icon('sparkles-outline', () => nav.navigate('Tabs', { screen: 'Assistant' }))}
+        <View style={{ flexDirection: 'row', gap: narrow ? 6 : 10, flexShrink: 0 }}>
+          {!narrow ? icon('notifications-outline', () => nav.navigate('Tabs', { screen: 'Alerts' })) : null}
+          {!narrow ? icon('sparkles-outline', () => nav.navigate('Tabs', { screen: 'Assistant' })) : null}
           {icon('scan-outline', () => nav.navigate('Tabs', { screen: 'Scan' }), true)}
-          {icon('sunny-outline', () => {})}
+          {icon(theme.mode === 'dark' ? 'sunny-outline' : 'moon-outline', theme.toggle)}
           {icon('menu-outline', () => setMenuOpen(true))}
         </View>
       </View>
       <Body
-        style={{ flex: 1 }}
+        style={{ flex: 1, width: '100%' }}
         {...(scroll
-          ? { contentContainerStyle: { padding: 20, paddingBottom: 40, gap: 16 }, keyboardShouldPersistTaps: 'handled' as const }
+          ? {
+              contentContainerStyle: {
+                padding: narrow ? 14 : 20,
+                paddingBottom: 40,
+                gap: 16,
+                width: '100%',
+                maxWidth: 960,
+                alignSelf: 'center' as const,
+              },
+              keyboardShouldPersistTaps: 'handled' as const,
+            }
           : {})}
       >
         {children}
@@ -329,7 +394,7 @@ export function PageHead({
   );
 }
 
-const s = StyleSheet.create({
+const s = themed(() => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,7 +433,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hIconHot: { borderColor: '#6b5320', backgroundColor: '#1a1608' },
+  hIconHot: { borderColor: colors.tintGoldBorder, backgroundColor: colors.tintGold },
   eyebrow: { color: colors.muted, fontSize: 13, letterSpacing: 3, fontWeight: '700' },
   body: { color: colors.muted, fontSize: 17, lineHeight: 26 },
   panel: {
@@ -397,7 +462,7 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
-  chipActive: { borderColor: '#6b5320', backgroundColor: '#1a1608' },
+  chipActive: { borderColor: colors.tintGoldBorder, backgroundColor: colors.tintGold },
   chipText: { color: colors.text, fontSize: 15 },
   seg: {
     flexDirection: 'row',
@@ -408,7 +473,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.card,
   },
   segItem: { flex: 1, paddingVertical: 10, borderRadius: radius.pill, alignItems: 'center' },
-  segActive: { backgroundColor: '#1b2230' },
+  segActive: { backgroundColor: colors.tintBlue },
   segText: { color: colors.muted, fontSize: 16, fontWeight: '600' },
   search: {
     flexDirection: 'row',
@@ -427,7 +492,7 @@ const s = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#161b24',
+    backgroundColor: colors.tintIcon,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -445,7 +510,7 @@ const s = StyleSheet.create({
     paddingVertical: 16,
   },
   selectText: { color: colors.text, fontSize: 18 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
+  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: 24 },
   sheet: {
     backgroundColor: colors.card,
     borderRadius: radius.md,
@@ -459,11 +524,11 @@ const s = StyleSheet.create({
   slot: {
     height: 300,
     borderRadius: radius.md,
-    backgroundColor: '#111720',
+    backgroundColor: colors.tintSlot,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-});
+}));
 
 export const money = { fontFamily: mono, color: colors.text, fontWeight: '700' as const };

@@ -1,15 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../theme';
 import { Btn, Body, PageHead, Panel, Screen, SearchBox } from '../ui';
 import { ChatMessage } from '../types';
-import { formatMoney, marketPrice } from '../api';
+import { formatDate, formatMoney, marketPrice } from '../api';
+import { askAssistant, getStatus, KeyStatus } from '../server';
+import { assistantContext } from '../portfolio';
+import { Card } from '../types';
 import { useStore } from '../store';
 import { useCardSearch } from './Home';
 
 const GROUPS: { title: string; prompts: string[] }[] = [
-  { title: 'DATA CHECK', prompts: ['How many dated readings do I actually have?'] },
+  {
+    title: 'MY PORTFOLIO',
+    prompts: [
+      'How is my portfolio doing overall?',
+      'Which of my cards are my top gainers, and should I hold or sell them?',
+      'How much of my value is sealed versus singles?',
+      'Help me track what I have spent and earned so far',
+    ],
+  },
   {
     title: 'LEARNING',
     prompts: [
@@ -21,38 +32,53 @@ const GROUPS: { title: string; prompts: string[] }[] = [
 ];
 
 export default function Assistant() {
-  const { owned, alerts } = useStore();
+  const { owned, alerts, wishlist, sealed, sales, recent } = useStore();
   const search = useCardSearch();
-  const [attached, setAttached] = useState<string | null>(null);
+  const [attached, setAttached] = useState<Card | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<KeyStatus | null | 'error'>(null);
+  useEffect(() => {
+    getStatus().then(setStatus).catch(() => setStatus('error'));
+  }, []);
 
-  /**
-   * LOCAL STUB. Replace `answer` with a call to your backend / LLM.
-   * Keep the "never guess a price" rule: only quote stored readings.
-   */
-  const answer = (q: string): string => {
-    const lower = q.toLowerCase();
-    if (lower.includes('dated readings')) {
-      const dated = owned.filter((e) => e.card.tcgplayer?.updatedAt).length;
-      return `${dated} of your ${owned.length} recorded copies have a dated market reading.`;
+  /** Portfolio facts sent to the server as system instructions. Only stored numbers, each with its date. */
+  const buildContext = (): string => {
+    const extra: string[] = [];
+    if (wishlist.length) extra.push(`WISHLIST: ${wishlist.slice(0, 15).map((w) => w.card.name).join(', ')}`);
+    if (alerts.length) extra.push(`ALERTS: ${alerts.slice(0, 15).map((x) => `${x.card.name} ${x.direction} ${formatMoney(x.target)}`).join(', ')}`);
+    if (attached) {
+      extra.push(
+        `ATTACHED CARD: ${attached.name} (${attached.set.name} #${attached.number}), stored market price ${formatMoney(marketPrice(attached))}` +
+          `${attached.tcgplayer?.updatedAt ? `, dated ${formatDate(attached.tcgplayer.updatedAt)}` : ''}`,
+      );
     }
-    if (lower.includes('collection') || lower.includes('worth')) {
-      const total = owned.reduce((n, e) => n + (marketPrice(e.card) ?? 0) * e.qty, 0);
-      return `Stored market estimates put your collection at ${formatMoney(total)}, across ${owned.length} entries. ${alerts.length} alerts are active.`;
-    }
-    return 'The live assistant needs a backend connected (see src/screens/Assistant.tsx). Until then I can answer questions about your stored collection and readings.';
+    return assistantContext(owned, sealed, sales, recent, extra);
   };
 
-  const send = (text: string) => {
-    if (!text.trim()) return;
+  const send = async (text: string) => {
+    const q = text.trim();
+    if (!q || busy) return;
     const id = String(Date.now());
-    setMsgs((m) => [
-      ...m,
-      { id, role: 'user', text },
-      { id: id + 'a', role: 'assistant', text: answer(text) },
-    ]);
+    const next: ChatMessage[] = [...msgs, { id, role: 'user', text: q }];
+    setMsgs(next);
     setInput('');
+    setBusy(true);
+    try {
+      const reply = await askAssistant(
+        next.map((m) => ({ role: m.role, text: m.text })),
+        buildContext(),
+      );
+      setMsgs((m) => [...m, { id: id + 'a', role: 'assistant', text: reply }]);
+    } catch (e: any) {
+      const why = e?.notConfigured
+        ? 'The assistant is off until the Gemini key is added on the server (GEMINI_API_KEY).'
+        : e?.message ?? 'Something went wrong. Try again.';
+      setMsgs((m) => [...m, { id: id + 'a', role: 'assistant', text: why }]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -63,9 +89,15 @@ export default function Assistant() {
         text="Deal checks, your collection, recorded market history and general collecting questions — in a single conversation that remembers what you already asked."
       />
       <View style={{ flexDirection: 'row', gap: 12 }}>
-        <Btn label="History" icon="time-outline" />
         <Btn label="New" icon="chatbox-ellipses-outline" kind="gold" onPress={() => setMsgs([])} />
       </View>
+      <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+        {status === null
+          ? 'Checking connections…'
+          : status === 'error'
+          ? 'Could not reach the server functions. They may not be deployed yet, or the site needs a redeploy.'
+          : `Gemini ${status.gemini ? '✓ connected' : '✗ key missing'} · Live prices ${status.prices ? '✓ connected' : '✗ key missing'}`}
+      </Text>
       <SearchBox
         value={search.text}
         onChangeText={search.setText}
@@ -75,7 +107,7 @@ export default function Assistant() {
         <Pressable
           key={c.id}
           onPress={() => {
-            setAttached(c.name);
+            setAttached(c);
             search.setText('');
           }}
         >
@@ -84,7 +116,7 @@ export default function Assistant() {
           </Text>
         </Pressable>
       ))}
-      {attached ? <Text style={{ color: colors.gold }}>Attached: {attached}</Text> : null}
+      {attached ? <Text style={{ color: colors.gold }}>Attached: {attached.name} · {attached.set.name} #{attached.number}</Text> : null}
 
       <Panel style={{ gap: 14, borderRadius: radius.lg }}>
         {msgs.map((m) => (
@@ -93,7 +125,7 @@ export default function Assistant() {
             style={{
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: '88%',
-              backgroundColor: m.role === 'user' ? '#2a2210' : '#141a24',
+              backgroundColor: m.role === 'user' ? colors.bubbleUser : colors.bubbleBot,
               borderRadius: 16,
               padding: 12,
             }}
@@ -118,12 +150,13 @@ export default function Assistant() {
               </View>
             ))
           : null}
+        {busy ? <Text style={{ color: colors.muted }}>Thinking…</Text> : null}
         {msgs.length === 0 ? (
           <View
             style={{
               borderWidth: 1,
-              borderColor: '#4a3c14',
-              backgroundColor: '#17130a',
+              borderColor: colors.noteBorder,
+              backgroundColor: colors.noteBg,
               borderRadius: 18,
               padding: 14,
               gap: 6,

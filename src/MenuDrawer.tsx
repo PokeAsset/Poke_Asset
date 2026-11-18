@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from './theme';
+import { colors, themed } from './theme';
 import { useStore } from './store';
 
 type Item = {
@@ -20,9 +20,9 @@ export const MENU: { section: string; items: Item[] }[] = [
     section: 'Catalog',
     items: [
       { label: 'Card database', icon: 'search-outline', go: ['CardDatabase'] },
-      { label: 'Sets & checklists', icon: 'layers-outline', go: stub('Sets & checklists', 'Catalog') },
-      { label: 'Sealed products', icon: 'cube-outline', go: stub('Sealed products', 'Catalog') },
-      { label: 'Sealed market', icon: 'stats-chart-outline', go: stub('Sealed market', 'Catalog') },
+      { label: 'Sets & checklists', icon: 'layers-outline', go: ['Sets'] },
+      { label: 'Sealed products', icon: 'cube-outline', go: ['Sealed'] },
+      { label: 'Sealed scanner', icon: 'barcode-outline', go: ['SealedScan'] },
     ],
   },
   {
@@ -51,7 +51,7 @@ export const MENU: { section: string; items: Item[] }[] = [
       { label: 'Business dashboard', icon: 'bar-chart-outline', go: stub('Business dashboard', 'Business') },
       { label: 'Suppliers', icon: 'cube-outline', go: stub('Suppliers', 'Business') },
       { label: 'Marketplace ops', icon: 'trending-up-outline', go: stub('Marketplace ops', 'Business') },
-      { label: 'Graded prices', icon: 'analytics-outline', go: stub('Graded prices', 'Business') },
+      { label: 'PokéGrade', icon: 'speedometer-outline', go: ['Grade'] },
       { label: 'Moderation', icon: 'shield-checkmark-outline', go: stub('Moderation', 'Business') },
       { label: 'Data health', icon: 'server-outline', go: stub('Data health', 'Business') },
     ],
@@ -66,7 +66,7 @@ export default function MenuDrawer({ navigation }: { navigation: any }) {
   return (
     <Modal transparent animationType="fade" visible={menuOpen} onRequestClose={close}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' }} onPress={close} />
+        <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={close} />
         <View style={[d.drawer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}>
           <View style={d.top}>
             <Text style={d.menuLabel}>MENU</Text>
@@ -104,7 +104,7 @@ export default function MenuDrawer({ navigation }: { navigation: any }) {
   );
 }
 
-const d = StyleSheet.create({
+const d = themed(() => StyleSheet.create({
   drawer: { width: '70%', backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border },
   top: {
     flexDirection: 'row',
@@ -136,4 +136,4 @@ const d = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-});
+}));

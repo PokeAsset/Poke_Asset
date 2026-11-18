@@ -3,7 +3,6 @@ import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme';
 import { Empty, PageHead, Panel, Screen, SearchBox } from '../ui';
-import { useStore } from '../store';
 import { CardRow } from './CardDetail';
 import { useCardSearch } from './Home';
 
@@ -22,26 +21,6 @@ export function CardDatabase() {
         ) : (
           s.results.map((c) => (
             <CardRow key={c.id} card={c} onPress={() => nav.navigate('CardDetail', { card: c })} />
-          ))
-        )}
-      </Panel>
-    </Screen>
-  );
-}
-
-/** Wishlist = alerts that have a target. */
-export function Wishlist() {
-  const nav = useNavigation<any>();
-  const { alerts } = useStore();
-  return (
-    <Screen>
-      <PageHead eyebrow="My portfolio" title="Wishlist" text="Cards you are watching with a target price." />
-      <Panel>
-        {alerts.length === 0 ? (
-          <Empty icon="heart-outline" text="Open any card and set a target price to add it here." />
-        ) : (
-          alerts.map((a) => (
-            <CardRow key={a.key} card={a.card} onPress={() => nav.navigate('CardDetail', { card: a.card })} />
           ))
         )}
       </Panel>
