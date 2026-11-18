@@ -304,3 +304,7 @@ export default function Grade({ route }: any) {
     </Screen>
   );
 }
+
+
+
+
