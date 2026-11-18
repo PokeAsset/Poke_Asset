@@ -97,11 +97,28 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
                     <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{p.name}</Text>
                   </Pressable>
                   <Text style={{ color: colors.muted, fontSize: 13 }}>
-                    {[p.setName, p.type, p.updatedAt ? `updated ${formatDate(p.updatedAt)}` : null].filter(Boolean).join(' · ')}
+                    {[p.setName, p.type, p.variant].filter(Boolean).join(' · ')}
                   </Text>
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    {p.market != null ? `Market ${formatMoney(p.market)}` : 'No price on file'}
-                    {p.low != null ? ` · Low ${formatMoney(p.low)}` : ''}
+                  <View style={{ flexDirection: 'row', gap: 18, flexWrap: 'wrap' }}>
+                    <View>
+                      <Text style={{ color: colors.muted, fontSize: 11, letterSpacing: 1 }}>MARKET PRICE</Text>
+                      <Text style={{ color: colors.text, fontWeight: '800', fontSize: 17 }}>{p.market != null ? formatMoney(p.market) : 'No price on file'}</Text>
+                    </View>
+                    <View>
+                      <Text style={{ color: colors.muted, fontSize: 11, letterSpacing: 1 }}>LOWEST LISTING</Text>
+                      <Text style={{ color: colors.text, fontWeight: '700', fontSize: 17 }}>{p.low != null ? formatMoney(p.low) : '—'}</Text>
+                    </View>
+                    <View>
+                      <Text style={{ color: colors.muted, fontSize: 11, letterSpacing: 1 }}>HISTORY</Text>
+                      <Text style={{ color: p.history && p.history.length > 1 ? colors.amber : colors.muted, fontWeight: '700', fontSize: 14, paddingTop: 3 }}>
+                        {p.history && p.history.length > 1 ? `${p.history.length} readings (tap name)` : 'none recorded'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {p.market != null || p.low != null
+                      ? `Source: ${p.source ?? 'price service'}${p.updatedAt ? ` · price dated ${formatDate(p.updatedAt)}` : ' · no price date given'}`
+                      : 'No source has a price for this product.'}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
                     <Small text={n > 0 ? `+ Add (${n} owned)` : '+ Add'} on={n > 0} onPress={() => add(p)} />

@@ -55,6 +55,121 @@ export async function askAssistant(messages: { role: string; text: string }[], c
   return r.lookups && r.lookups.length ? `${text}\n\nLive lookups used: ${r.lookups.join('; ')}` : text;
 }
 
+export type StreamHandlers = { onText: (delta: string) => void; onStatus?: (s: string) => void };
+
+/**
+ * Asks the assistant and shows the answer as it is written. Gives up after 75 seconds in total or 35 seconds
+ * of silence. Where the platform cannot stream (some native builds) it falls back to one waiting request.
+ */
+export async function askAssistantStream(
+  messages: { role: string; text: string }[],
+  context: string,
+  h: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const ctl = new AbortController();
+  const onAbort = () => ctl.abort();
+  signal?.addEventListener('abort', onAbort);
+  let silence: ReturnType<typeof setTimeout> | undefined;
+  const bump = () => {
+    if (silence) clearTimeout(silence);
+    silence = setTimeout(() => ctl.abort(), 35000);
+  };
+  const overall = setTimeout(() => ctl.abort(), 75000);
+  const tooSlow = () => new ServerError('The assistant took too long to answer. Try again, or ask a shorter question.');
+  try {
+    bump();
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api/assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, context, stream: true }),
+        signal: ctl.signal,
+      });
+    } catch {
+      if (signal?.aborted) throw new ServerError('Stopped.');
+      throw ctl.signal.aborted ? tooSlow() : new ServerError('Could not reach the PokéAsset server. Check your connection.');
+    }
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !type.includes('ndjson')) {
+      let j: any = null;
+      try {
+        j = await res.json();
+      } catch {
+        // not JSON
+      }
+      if (res.ok && j?.text) {
+        h.onText(j.text);
+        return j.lookups ?? [];
+      }
+      throw new ServerError(
+        j?.error ?? (res.status === 404 ? 'The server functions are not deployed yet (the /api folder is missing on Vercel).' : res.status === 504 ? 'The server took too long to answer. Try again.' : `Server error (${res.status}).`),
+        !!j?.notConfigured,
+      );
+    }
+    const reader = (res as any).body?.getReader?.();
+    if (!reader) {
+      // no streaming here: use the one-shot endpoint
+      const text = await askAssistant(messages, context);
+      h.onText(text);
+      return [];
+    }
+    const dec = new TextDecoder();
+    let buf = '';
+    let lookups: string[] = [];
+    let got = false;
+    const handle = (line: string) => {
+      if (!line.trim()) return;
+      let ev: any;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (ev.t === 'text') {
+        got = true;
+        h.onStatus?.('');
+        h.onText(ev.v);
+      } else if (ev.t === 'status') h.onStatus?.(ev.v);
+      else if (ev.t === 'done') lookups = ev.lookups ?? [];
+      else if (ev.t === 'error') throw new ServerError(ev.v || 'The assistant had a problem.', !!ev.notConfigured);
+    };
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bump();
+        buf += dec.decode(value, { stream: true });
+        let i: number;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          handle(buf.slice(0, i));
+          buf = buf.slice(i + 1);
+        }
+      }
+      handle(buf);
+    } catch (e) {
+      if (e instanceof ServerError) throw e;
+      if (signal?.aborted) throw new ServerError('Stopped.');
+      throw tooSlow();
+    }
+    if (!got) throw new ServerError('The assistant returned nothing. Try again.');
+    return lookups;
+  } finally {
+    clearTimeout(overall);
+    if (silence) clearTimeout(silence);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+export type TestResult = { ok: boolean; ms: number; message: string };
+export type Diagnostics = KeyStatus & { tests: { gemini: TestResult; prices: TestResult; catalog: TestResult; accounts: TestResult } };
+
+/** Makes one small live call to each service and reports what each one said (no keys are returned). */
+export async function runDiagnostics(): Promise<Diagnostics> {
+  return call<Diagnostics>('/api/status?test=1');
+}
+
 export type KeyStatus = { gemini: boolean; prices: boolean; accounts?: boolean; model: string };
 
 /** Which server keys are connected (true/false only, never the keys themselves). */
@@ -167,12 +282,39 @@ export type SealedItem = {
   low: number | null;
   updatedAt: string | null;
   history: SeriesPoint[] | null;
+  /** edition / printing words found in the name, e.g. "1st Edition" */
+  variant?: string | null;
+  /** where the price came from, shown next to it */
+  source?: string | null;
 };
 
-export async function searchSealed(q: string, set?: string): Promise<SealedItem[]> {
+export type SealedResult = { items: SealedItem[]; fetchedAt: string; warnings: string[] };
+
+const sealedCache = new Map<string, { at: number; r: SealedResult }>();
+const SEALED_TTL = 6 * 60 * 60 * 1000;
+
+/**
+ * Sealed products and their prices. Results are reused for 6 hours (prices from the service only change about
+ * daily); pass force = true (the Refresh button) to ask again now.
+ */
+export async function loadSealed(q: string, set?: string, force = false): Promise<SealedResult> {
+  const key = `${q}|${set ?? ''}`;
+  const hit = sealedCache.get(key);
+  if (!force && hit && Date.now() - hit.at < SEALED_TTL) return hit.r;
   const params = new URLSearchParams({ action: 'sealed', q });
   if (set) params.set('set', set);
-  return (await call<{ items: SealedItem[] }>(`/api/prices?${params.toString()}`)).items ?? [];
+  const r = await call<{ items: SealedItem[]; errors?: { provider: string; message: string }[]; fetchedAt?: string }>(`/api/prices?${params.toString()}`);
+  const out: SealedResult = {
+    items: (r.items ?? []).filter((p) => p && typeof p.name === 'string'),
+    fetchedAt: r.fetchedAt ?? new Date().toISOString(),
+    warnings: (r.errors ?? []).map((e) => `${e.provider}: ${e.message}`),
+  };
+  sealedCache.set(key, { at: Date.now(), r: out });
+  return out;
+}
+
+export async function searchSealed(q: string, set?: string): Promise<SealedItem[]> {
+  return (await loadSealed(q, set)).items;
 }
 
 /* ---------------- accounts ---------------- */

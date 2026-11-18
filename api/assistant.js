@@ -1,4 +1,4 @@
-const { limited, send, readBody, geminiTurn } = require('./_util');
+const { limited, send, readBody, geminiStream } = require('./_util');
 const { normalizeCard, listOf, num, ppt } = require('./_pricing');
 
 const SYSTEM =
@@ -105,42 +105,73 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
   if (limited(req, 20)) return send(res, 429, { error: 'Too many requests. Wait a minute and try again.' });
   const body = await readBody(req);
-  const msgs = Array.isArray(body.messages) ? body.messages.slice(-12) : [];
+  const msgs = Array.isArray(body.messages) ? body.messages.slice(-16) : [];
   const context = typeof body.context === 'string' ? body.context.slice(0, 9000) : '';
+  const stream = body.stream === true;
   if (msgs.length === 0) return send(res, 400, { error: 'No message.' });
 
   // conversation as Gemini turns; it must start with a user turn
   const contents = msgs
-    .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 2000) }] }))
+    .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 3000) }] }))
     .filter((c) => c.parts[0].text);
   while (contents.length && contents[0].role !== 'user') contents.shift();
   if (contents.length === 0) return send(res, 400, { error: 'No message.' });
 
   const system = `${SYSTEM}\n\nPORTFOLIO CONTEXT (from the user's app, may be empty):\n${context || '(none)'}`;
   const lookups = [];
+  const started = Date.now();
+
+  let write = () => {};
+  let full = '';
+  if (stream) {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    write = (o) => res.write(JSON.stringify(o) + '\n');
+  }
+  const onText = (t) => {
+    full += t;
+    write({ t: 'text', v: t });
+  };
+  const fail = (e) => {
+    const out = { error: e.message || 'Assistant request failed.', notConfigured: e.code === 'not_configured' };
+    if (stream) {
+      write({ t: 'error', v: out.error, notConfigured: out.notConfigured });
+      return res.end();
+    }
+    return send(res, e.code === 'not_configured' ? 503 : 502, out);
+  };
+
   try {
     // up to 3 rounds of tool use, then a final answer
     for (let round = 0; round < 4; round++) {
-      const turn = await geminiTurn({ system, contents, tools: round < 3 ? TOOLS : undefined });
+      if (Date.now() - started > 50000) throw Object.assign(new Error('The assistant ran out of time. Try a simpler question.'), { code: 'timeout' });
+      full = round === 0 ? '' : full; // text before a tool call is kept; the final answer continues it
+      const turn = await geminiStream({ system, contents, tools: round < 3 ? TOOLS : undefined, onText: stream ? onText : (t) => { full += t; } });
       const calls = turn.parts.filter((p) => p.functionCall);
       if (calls.length === 0) {
         const text = turn.parts.map((p) => p.text || '').join('').trim();
-        if (!text) return send(res, 502, { error: 'The assistant returned an empty answer. Try again.' });
-        return send(res, 200, { ok: true, text, lookups });
+        if (!text && !full.trim()) throw Object.assign(new Error('The assistant returned an empty answer. Try again.'), { code: 'upstream' });
+        if (stream) {
+          write({ t: 'done', lookups });
+          return res.end();
+        }
+        return send(res, 200, { ok: true, text: full.trim() || text, lookups });
       }
       contents.push(turn);
       const results = [];
       for (const c of calls.slice(0, 3)) {
-        const out = await runTool(c.functionCall.name, c.functionCall.args || {});
         const a = c.functionCall.args || {};
+        write({ t: 'status', v: c.functionCall.name === 'lookup_card_price' ? `Looking up the price of ${a.name || 'a card'}…` : `Looking up ${a.query || 'a sealed product'}…` });
+        const out = await runTool(c.functionCall.name, a);
         lookups.push(`${c.functionCall.name === 'lookup_card_price' ? 'card' : 'sealed'}: ${a.name || a.query || ''}${out.error ? ' (failed)' : ''}`);
         results.push({ functionResponse: { name: c.functionCall.name, response: { result: out } } });
       }
       contents.push({ role: 'user', parts: results });
     }
-    return send(res, 502, { error: 'The assistant took too many steps. Try a simpler question.' });
+    throw Object.assign(new Error('The assistant took too many steps. Try a simpler question.'), { code: 'upstream' });
   } catch (e) {
-    if (e.code === 'not_configured') return send(res, 503, { error: e.message, notConfigured: true });
-    return send(res, 502, { error: e.message || 'Assistant request failed.' });
+    return fail(e);
   }
 };

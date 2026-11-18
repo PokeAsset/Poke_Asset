@@ -43,10 +43,10 @@ export const MENU: { section: string; items: Item[] }[] = [
     items: [
       { label: 'Marketplace', icon: 'people-outline', go: tab('Marketplace') },
       { label: 'Messages', icon: 'chatbox-outline', go: stub('Messages', 'Community') },
-      { label: 'My sale staging', icon: 'storefront-outline', go: stub('My sale staging', 'Community') },
+      { label: 'My sale staging', icon: 'storefront-outline', go: ['SaleStaging'] },
       { label: 'Live shop', icon: 'pricetag-outline', go: stub('Live shop', 'Community') },
-      { label: 'Store', icon: 'storefront-outline', go: stub('Store', 'Community') },
-      { label: 'My orders', icon: 'receipt-outline', go: stub('My orders', 'Community') },
+      { label: 'Store', icon: 'storefront-outline', go: ['Store'] },
+      { label: 'My orders', icon: 'receipt-outline', go: ['MyOrders'] },
     ],
   },
   {
@@ -54,10 +54,10 @@ export const MENU: { section: string; items: Item[] }[] = [
     items: [
       { label: 'Business dashboard', icon: 'bar-chart-outline', go: stub('Business dashboard', 'Business') },
       { label: 'Suppliers', icon: 'cube-outline', go: stub('Suppliers', 'Business') },
-      { label: 'Marketplace ops', icon: 'trending-up-outline', go: stub('Marketplace ops', 'Business') },
+      { label: 'Marketplace ops', icon: 'trending-up-outline', go: ['MarketOps'] },
       { label: 'PokéGrade', icon: 'speedometer-outline', go: ['Grade'] },
       { label: 'Moderation', icon: 'shield-checkmark-outline', go: stub('Moderation', 'Business') },
-      { label: 'Data health', icon: 'server-outline', go: stub('Data health', 'Business') },
+      { label: 'Data health', icon: 'server-outline', go: ['DataHealth'] },
     ],
   },
 ];

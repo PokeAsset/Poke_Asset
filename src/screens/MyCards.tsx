@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, mono, radius } from '../theme';
 import { Btn, Empty, PageHead, Panel, Screen, SearchBox, Segmented, Select } from '../ui';
 import { formatDate, formatMoney, formatPct, formatSigned, variantList } from '../api';
-import { searchSealed } from '../server';
+import { loadSealed } from '../server';
 import { useStore } from '../store';
 import { combinedTotals, entryPnl, entryValue, realizedProfit, setProgress } from '../portfolio';
 import { ValueChart } from '../charts';
@@ -158,7 +158,7 @@ export default function MyCards() {
     let done = 0;
     try {
       for (const s of sealed.slice(0, 10)) {
-        const list = await searchSealed(s.name, s.setName ?? undefined);
+        const list = (await loadSealed(s.name, s.setName ?? undefined, true)).items;
         const hit = list.find((p) => (s.productId != null && p.id === s.productId) || p.name === s.name);
         if (hit && hit.market != null) {
           updateSealed(s.key, { market: hit.market, updatedAt: hit.updatedAt });

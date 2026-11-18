@@ -40,6 +40,52 @@ async function readBody(req) {
 
 const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
+/** fetch that gives up after `ms` instead of hanging until the platform kills the function. */
+async function fetchTimeout(url, opts, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctl.signal });
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      const err = new Error(`The service did not answer within ${Math.round(ms / 1000)} seconds.`);
+      err.code = 'timeout';
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Turns Gemini's HTTP errors into messages that say what to fix. */
+function geminiError(status, message) {
+  const m = String(message || '');
+  let text;
+  if (status === 429 || /quota|rate.?limit|resource.?exhausted/i.test(m)) {
+    text = 'Gemini is rate-limited or out of free quota right now. Wait a minute and try again, or check usage in Google AI Studio.';
+  } else if (/api key not valid|api_key_invalid|permission.?denied|unauthenticated/i.test(m) || status === 401 || status === 403) {
+    text = 'Google rejected the Gemini key. Create a new key in Google AI Studio and update GEMINI_API_KEY in Vercel, then redeploy.';
+  } else if (status === 404 || /no longer available|not found|not supported/i.test(m)) {
+    text = `The model "${GEMINI_MODEL()}" is not available to this key. Set GEMINI_MODEL in Vercel to a current model name. Google said: ${m.slice(0, 200)}`;
+  } else if (status >= 500) {
+    text = 'Google\'s Gemini service had a temporary problem. Try again in a moment.';
+  } else {
+    text = m || `Gemini request failed (${status}).`;
+  }
+  const e = new Error(text);
+  e.code = 'upstream';
+  e.status = status;
+  return e;
+}
+
+const genConfig = () => {
+  const cfg = { temperature: 0.3 };
+  const lvl = process.env.GEMINI_THINKING; // optional: minimal | low | medium | high
+  if (lvl) cfg.thinkingConfig = { thinkingLevel: lvl };
+  return cfg;
+};
+
 /** Calls Gemini's generateContent. Returns the text of the first candidate. */
 async function gemini({ system, parts, json }) {
   const key = process.env.GEMINI_API_KEY;
@@ -51,20 +97,16 @@ async function gemini({ system, parts, json }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL()}:generateContent`;
   const body = {
     contents: [{ role: 'user', parts }],
-    generationConfig: { temperature: 0.3, ...(json ? { responseMimeType: 'application/json' } : {}) },
+    generationConfig: { ...genConfig(), ...(json ? { responseMimeType: 'application/json' } : {}) },
   };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
-  const r = await fetch(url, {
+  const r = await fetchTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify(body),
-  });
+  }, 40000);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const e = new Error((data && data.error && data.error.message) || `Gemini request failed (${r.status})`);
-    e.code = 'upstream';
-    throw e;
-  }
+  if (!r.ok) throw geminiError(r.status, data && data.error && data.error.message);
   const text = (((data.candidates || [])[0] || {}).content || {}).parts;
   return (text || []).map((p) => p.text || '').join('').trim();
 }
@@ -81,20 +123,16 @@ async function geminiTurn({ system, contents, tools }) {
     throw e;
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL()}:generateContent`;
-  const body = { contents, generationConfig: { temperature: 0.3 } };
+  const body = { contents, generationConfig: genConfig() };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   if (tools) body.tools = tools;
-  const r = await fetch(url, {
+  const r = await fetchTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify(body),
-  });
+  }, 40000);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const e = new Error((data && data.error && data.error.message) || `Gemini request failed (${r.status})`);
-    e.code = 'upstream';
-    throw e;
-  }
+  if (!r.ok) throw geminiError(r.status, data && data.error && data.error.message);
   const cand = (data.candidates || [])[0];
   if (!cand || !cand.content) {
     const e = new Error('Gemini returned no answer (it may have been blocked). Try rephrasing.');
@@ -104,4 +142,87 @@ async function geminiTurn({ system, contents, tools }) {
   return { role: 'model', parts: cand.content.parts || [] };
 }
 
-module.exports = { limited, send, readBody, gemini, geminiTurn };
+/**
+ * Streaming version of geminiTurn. Calls onText(delta) as text arrives and returns the full model turn
+ * (role + parts) so function calls can be answered and the conversation continued.
+ */
+async function geminiStream({ system, contents, tools, onText, ms = 45000 }) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const e = new Error('GEMINI_API_KEY is not set on the server.');
+    e.code = 'not_configured';
+    throw e;
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL()}:streamGenerateContent?alt=sse`;
+  const body = { contents, generationConfig: genConfig() };
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
+  if (tools) body.tools = tools;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  const parts = [];
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify(body),
+      signal: ctl.signal,
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      throw geminiError(r.status, data && data.error && data.error.message);
+    }
+    const decoder = new TextDecoder();
+    let buf = '';
+    let blocked = null;
+    const handle = (line) => {
+      if (!line.startsWith('data:')) return;
+      const raw = line.slice(5).trim();
+      if (!raw || raw === '[DONE]') return;
+      let j;
+      try {
+        j = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (j.promptFeedback && j.promptFeedback.blockReason) blocked = j.promptFeedback.blockReason;
+      const cand = (j.candidates || [])[0];
+      for (const p of (cand && cand.content && cand.content.parts) || []) {
+        if (p.thought) continue;
+        if (typeof p.text === 'string') {
+          const last = parts[parts.length - 1];
+          if (last && typeof last.text === 'string' && !last.functionCall) last.text += p.text;
+          else parts.push({ text: p.text });
+          if (p.text && onText) onText(p.text);
+        } else {
+          parts.push(p);
+        }
+      }
+    };
+    for await (const chunk of r.body) {
+      buf += decoder.decode(chunk, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        handle(buf.slice(0, i).trim());
+        buf = buf.slice(i + 1);
+      }
+    }
+    handle(buf.trim());
+    if (parts.length === 0) {
+      const e = new Error(blocked ? 'Gemini blocked that request. Try rephrasing.' : 'Gemini returned an empty answer. Try again.');
+      e.code = 'upstream';
+      throw e;
+    }
+    return { role: 'model', parts };
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      const err = new Error(`Gemini did not finish within ${Math.round(ms / 1000)} seconds. Try a shorter question.`);
+      err.code = 'timeout';
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+module.exports = { limited, send, readBody, gemini, geminiTurn, geminiStream, fetchTimeout, geminiError };

@@ -20,6 +20,11 @@ import MyCards from './src/screens/MyCards';
 import Alerts from './src/screens/Alerts';
 import Grade from './src/screens/Grade';
 import Market from './src/screens/Market';
+import SaleStaging from './src/screens/SaleStaging';
+import Store from './src/screens/Store';
+import MyOrders from './src/screens/MyOrders';
+import MarketOps from './src/screens/MarketOps';
+import DataHealth from './src/screens/DataHealth';
 import Trade from './src/screens/Trade';
 import CardDetail from './src/screens/CardDetail';
 import { CardDatabase, Placeholder } from './src/screens/Misc';
@@ -136,6 +141,11 @@ export default function App() {
               <Stack.Screen name="SealedScan" component={SealedScan} />
               <Stack.Screen name="Grade" component={Grade} />
               <Stack.Screen name="Market" component={Market} />
+              <Stack.Screen name="SaleStaging" component={SaleStaging} />
+              <Stack.Screen name="Store" component={Store} />
+              <Stack.Screen name="MyOrders" component={MyOrders} />
+              <Stack.Screen name="MarketOps" component={MarketOps} />
+              <Stack.Screen name="DataHealth" component={DataHealth} />
               <Stack.Screen name="Trade" component={Trade} />
               <Stack.Screen name="Placeholder" component={Placeholder} />
             </Stack.Navigator>

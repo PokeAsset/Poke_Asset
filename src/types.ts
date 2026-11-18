@@ -82,7 +82,7 @@ export type Listing = {
   mine: boolean;
 };
 
-export type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string };
+export type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string; error?: boolean };
 
 export type SeriesPoint = { date: string; price: number };
 

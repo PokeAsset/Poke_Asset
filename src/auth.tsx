@@ -26,7 +26,9 @@ type Auth = {
   resetPassword: (email: string) => Promise<AuthResult>;
   setNewPassword: (password: string) => Promise<AuthResult>;
   /** Call the account database as the signed-in person. */
-  rest: (path: string, init?: RequestInit) => Promise<Response>;
+  rest: (path: string, init?: RequestInit, anon?: boolean) => Promise<Response>;
+  /** Upload a listing photo to the signed-in person's own folder. Returns its public address. */
+  uploadPhoto: (base64: string, mime: string) => Promise<string>;
 };
 
 const Ctx = createContext<Auth | null>(null);
@@ -260,26 +262,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const rest = useCallback(
-    async (path: string, init: RequestInit = {}) => {
+    async (path: string, init: RequestInit = {}, anon = false) => {
+      const c = cfgRef.current;
+      if (!c) throw new Error('Accounts are not set up on this site yet.');
+      const s = await validSession();
+      if (!s && !anon) throw new Error('Not signed in.');
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 25000);
+      try {
+        return await fetch(`${c.url}/rest/v1/${path}`, {
+          ...init,
+          signal: ctl.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: c.anonKey,
+            Authorization: `Bearer ${s ? s.accessToken : c.anonKey}`,
+            ...((init.headers as Record<string, string>) ?? {}),
+          },
+        });
+      } catch {
+        throw new Error('Could not reach the account service. Check your connection and try again.');
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    [validSession],
+  );
+
+  const uploadPhoto = useCallback(
+    async (base64: string, mime: string): Promise<string> => {
       const c = cfgRef.current;
       const s = await validSession();
-      if (!c || !s) throw new Error('Not signed in.');
-      return fetch(`${c.url}/rest/v1/${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: c.anonKey,
-          Authorization: `Bearer ${s.accessToken}`,
-          ...((init.headers as Record<string, string>) ?? {}),
-        },
+      if (!c || !s) throw new Error('Sign in to upload photos.');
+      const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+      const type = ext === 'jpg' ? 'image/jpeg' : mime;
+      const bin = atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (bytes.length > 3 * 1024 * 1024) throw new Error('That photo is over 3 MB. Choose a smaller one.');
+      const path = `${s.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const res = await fetch(`${c.url}/storage/v1/object/listing-photos/${path}`, {
+        method: 'POST',
+        headers: { apikey: c.anonKey, Authorization: `Bearer ${s.accessToken}`, 'Content-Type': type },
+        body: bytes as any,
       });
+      if (!res.ok) {
+        let m = '';
+        try {
+          m = (await res.json())?.message ?? '';
+        } catch {
+          // ignore
+        }
+        throw new Error(/bucket not found/i.test(m) ? 'Photo storage is not set up. Run supabase/marketplace.sql.' : m || `Photo upload failed (${res.status}).`);
+      }
+      return `${c.url}/storage/v1/object/public/listing-photos/${path}`;
     },
     [validSession],
   );
 
   const value = useMemo<Auth>(
-    () => ({ status, session, recovering: !!recoveryToken, signIn, signUp, signOut, resetPassword, setNewPassword, rest }),
-    [status, session, recoveryToken, signIn, signUp, signOut, resetPassword, setNewPassword, rest],
+    () => ({ status, session, recovering: !!recoveryToken, signIn, signUp, signOut, resetPassword, setNewPassword, rest, uploadPhoto }),
+    [status, session, recoveryToken, signIn, signUp, signOut, resetPassword, setNewPassword, rest, uploadPhoto],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

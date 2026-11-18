@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, mono, radius } from '../theme';
 import { Btn, Chip, Empty, PageHead, Panel, Screen, SearchBox, Segmented, Select } from '../ui';
@@ -10,6 +11,7 @@ const FILTERS = ['All items', 'Cards', 'Sealed', 'PSA', 'CGC', 'Beckett (BGS)'];
 const SORTS = ['Newest', 'Price: low to high', 'Price: high to low'];
 
 export default function Marketplace() {
+  const nav = useNavigation<any>();
   const { listings, addListing, toggleSaved } = useStore();
   const [tab, setTab] = useState('Browse');
   const [q, setQ] = useState('');
@@ -52,6 +54,16 @@ export default function Marketplace() {
         title="Buy and sell with other collectors"
         text="Member listings for cards and sealed product, with the asking price shown against recorded market evidence. PokéAsset does not process payments or hold funds — you arrange the sale directly and message through the app."
       />
+      <Panel style={{ gap: 10 }}>
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Live community listings</Text>
+        <Text style={{ color: colors.muted, lineHeight: 21 }}>
+          Listings made in My sale staging are shared with every member in the Store. The list below is your private on-device wish board.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          <Btn kind="gold" icon="storefront-outline" label="Open the Store" onPress={() => nav.navigate('Store')} />
+          <Btn icon="pricetag-outline" label="Sell from my collection" onPress={() => nav.navigate('SaleStaging')} />
+        </View>
+      </Panel>
       <View style={{ flexDirection: 'row' }}>
         <Btn kind="gold" label="Create listing" icon="add" onPress={() => setCreating(true)} />
       </View>

@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Image, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
-import { Chip, Loading, PageHead, Screen, SearchBox } from '../ui';
+import { Btn, Chip, Loading, PageHead, Screen, SearchBox } from '../ui';
 import { formatDate, SetInfo } from '../api';
-import { searchSealed, SealedItem } from '../server';
+import { loadSealed, searchSealed, SealedItem } from '../server';
 import { SetBrowser } from '../setUi';
 import { SealedProducts } from '../sealedUi';
 
@@ -77,25 +77,33 @@ export function SealedSet({ route }: any) {
   const set: SetInfo = route.params.set;
   const [items, setItems] = useState<SealedItem[] | null>(null);
   const [busy, setBusy] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  const load = async (force: boolean) => {
+    force ? setRefreshing(true) : setBusy(true);
+    setError('');
+    try {
+      let r = await loadSealed('', set.name, force);
+      if (r.items.length === 0) r = await loadSealed(set.name, undefined, force);
+      setItems(r.items);
+      setFetchedAt(r.fetchedAt);
+      setWarnings(r.warnings);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not load sealed products.');
+    } finally {
+      setBusy(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    let live = true;
-    (async () => {
-      try {
-        let list = await searchSealed('', set.name);
-        if (list.length === 0) list = await searchSealed(set.name);
-        if (live) setItems(list);
-      } catch (e: any) {
-        if (live) setError(e?.message ?? 'Could not load sealed products.');
-      } finally {
-        if (live) setBusy(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
+    load(false);
   }, [set.name]);
+
+  const priced = (items ?? []).filter((p) => p.market != null).length;
 
   return (
     <Screen>
@@ -106,8 +114,19 @@ export function SealedSet({ route }: any) {
           {set.series} · {formatDate(set.releaseDate)} · sealed products
         </Text>
       </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Btn icon="refresh-outline" label={refreshing ? 'Refreshing…' : 'Refresh prices'} disabled={refreshing || busy} onPress={() => load(true)} />
+        <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>
+          {fetchedAt ? `Checked ${new Date(fetchedAt).toLocaleString()} · ${priced} of ${items?.length ?? 0} have a price` : ''}
+        </Text>
+      </View>
       {busy ? <Loading /> : null}
       {error ? <Text style={{ color: colors.red, lineHeight: 22 }}>{error}</Text> : null}
+      {warnings.map((w) => (
+        <Text key={w} style={{ color: colors.amber, fontSize: 13 }}>
+          Partial result: {w}
+        </Text>
+      ))}
       {!busy && !error ? (
         <SealedProducts
           items={items ?? []}
@@ -116,7 +135,7 @@ export function SealedSet({ route }: any) {
         />
       ) : null}
       <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
-        Prices are the market prices the price service reports. If a product shows no price, use “Check on TCGplayer” to look it up there.
+        Market = the price the service reports for the product. Low = the lowest listing it reports. The chart under a product (tap its name) is recorded price history. Prices refresh about once a day at the source; pressing Refresh asks again now. If a product shows no price, use “Check on TCGplayer” to look it up there.
       </Text>
     </Screen>
   );

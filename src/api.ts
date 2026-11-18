@@ -1,6 +1,48 @@
+import { Platform } from 'react-native';
 import { Card } from './types';
 
-const BASE = 'https://api.pokemontcg.io/v2/cards';
+const DIRECT = 'https://api.pokemontcg.io/v2';
+const SITE = (process.env.EXPO_PUBLIC_API_BASE ?? (Platform.OS === 'web' ? '' : 'https://pokeasset-nine.vercel.app')).replace(/\/$/, '');
+
+async function fetchTimeout(url: string, ms: number): Promise<Response> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { signal: ctl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Reads the card catalog. Goes through the site's own /api/catalog first (it has a timeout, a retry and caching),
+ * then falls back to pokemontcg.io directly. Failures come back as plain sentences, not "Load failed".
+ */
+async function catalog(kind: 'cards' | 'sets', params: Record<string, string>): Promise<any> {
+  const qs = new URLSearchParams(params).toString();
+  let reason = '';
+  try {
+    const r = await fetchTimeout(`${SITE}/api/catalog?kind=${kind}&${qs}`, 30000);
+    if (r.ok) {
+      const j = await r.json().catch(() => null);
+      if (j && Array.isArray(j.data)) return j;
+    }
+    reason = `site catalog ${r.status}`;
+  } catch {
+    reason = 'site catalog unreachable';
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetchTimeout(`${DIRECT}/${kind}?${qs}`, 25000);
+      if (r.ok) return await r.json();
+      reason = `catalog ${r.status}`;
+      if (r.status < 500 && r.status !== 429) break;
+    } catch {
+      reason = 'catalog timed out';
+    }
+  }
+  throw new Error(`The card catalog is not answering right now (${reason}). Check your connection and try again in a moment.`);
+}
 
 const PRICE_KEYS = [
   'holofoil',
@@ -106,13 +148,9 @@ export function formatDate(s?: string | null): string {
 }
 
 async function query(q: string, pageSize = 24, orderBy?: string): Promise<Card[]> {
-  const url =
-    `${BASE}?q=${encodeURIComponent(q)}&pageSize=${pageSize}` +
-    (orderBy ? `&orderBy=${encodeURIComponent(orderBy)}` : '') +
-    '&select=id,name,number,rarity,set,images,tcgplayer';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
-  const json = await res.json();
+  const params: Record<string, string> = { q, pageSize: String(pageSize), select: 'id,name,number,rarity,set,images,tcgplayer' };
+  if (orderBy) params.orderBy = orderBy;
+  const json = await catalog('cards', params);
   return json.data as Card[];
 }
 
@@ -138,13 +176,31 @@ export async function fetchCardsByIds(ids: string[]): Promise<Card[]> {
   return out;
 }
 
-/** Cards with the highest stored raw market estimates. */
-export async function topCards(era?: string, rarity?: string, size = 24): Promise<Card[]> {
-  const parts = ['tcgplayer.prices.holofoil.market:[80 TO *]'];
-  if (era) parts.push(`set.series:"${era}"`);
+export type RankedCard = { card: Card; price: number; variant: string; updatedAt: string | null };
+
+/**
+ * Cards ranked by raw TCGplayer market estimate (via pokemontcg.io). Cards without a verified market price are
+ * left out. Looks at every printing (holofoil, normal, reverse holo, 1st edition), not only holofoil.
+ */
+export async function rankedCards(seriesList?: string[], rarity?: string, size = 60): Promise<RankedCard[]> {
+  const price = PRICE_KEYS.map((k) => `tcgplayer.prices.${k}.market:[40 TO *]`).join(' OR ');
+  const parts = [`(${price})`];
+  if (seriesList && seriesList.length) parts.push(`(${seriesList.map((x) => `set.series:"${x}"`).join(' OR ')})`);
   if (rarity) parts.push(`rarity:"${rarity}"`);
   const cards = await query(parts.join(' '), 250);
-  return cards.sort((a, b) => (marketPrice(b) ?? 0) - (marketPrice(a) ?? 0)).slice(0, size);
+  const out: RankedCard[] = [];
+  cards.forEach((c) => {
+    const best = variantList(c)
+      .filter((v) => v.market != null && v.market > 0)
+      .sort((a, b) => (b.market ?? 0) - (a.market ?? 0))[0];
+    if (best && best.market != null) out.push({ card: c, price: best.market, variant: best.label, updatedAt: c.tcgplayer?.updatedAt ?? null });
+  });
+  return out.sort((a, b) => b.price - a.price).slice(0, size);
+}
+
+/** Cards with the highest stored raw market estimates. */
+export async function topCards(era?: string, rarity?: string, size = 24): Promise<Card[]> {
+  return (await rankedCards(era ? [era] : undefined, rarity, size)).map((r) => r.card);
 }
 
 const SEED: { name: string; number: string }[] = [
@@ -204,11 +260,11 @@ export type SetInfo = {
 
 /** Every set the catalog has ever released, newest first. */
 export async function fetchSets(): Promise<SetInfo[]> {
-  const res = await fetch(
-    'https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=250&select=id,name,ptcgoCode,series,printedTotal,total,releaseDate,images',
-  );
-  if (!res.ok) throw new Error(`Set list request failed (${res.status})`);
-  const json = await res.json();
+  const json = await catalog('sets', {
+    orderBy: '-releaseDate',
+    pageSize: '250',
+    select: 'id,name,ptcgoCode,series,printedTotal,total,releaseDate,images',
+  });
   return json.data as SetInfo[];
 }
 
@@ -216,12 +272,12 @@ export async function fetchSets(): Promise<SetInfo[]> {
 export async function fetchSetCards(setId: string): Promise<Card[]> {
   const out: Card[] = [];
   for (let page = 1; page <= 8; page++) {
-    const url =
-      `${BASE}?q=${encodeURIComponent(`set.id:"${setId}"`)}&pageSize=250&page=${page}` +
-      '&select=id,name,number,rarity,set,images,tcgplayer';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Card list request failed (${res.status})`);
-    const json = await res.json();
+    const json = await catalog('cards', {
+      q: `set.id:"${setId}"`,
+      pageSize: '250',
+      page: String(page),
+      select: 'id,name,number,rarity,set,images,tcgplayer',
+    });
     out.push(...(json.data as Card[]));
     if ((json.data as Card[]).length < 250) break;
   }
@@ -249,12 +305,8 @@ export function fetchEraArt(series: string[]): Promise<Record<string, SetArt>> {
       .join(' OR ');
     const out: Record<string, SetArt> = {};
     for (let page = 1; page <= 3; page++) {
-      const url =
-        `${BASE}?q=${encodeURIComponent(`(${s}) (${price})`)}&pageSize=250&page=${page}` +
-        '&select=id,images,set,tcgplayer';
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Set art request failed (${res.status})`);
-      const data = ((await res.json()).data ?? []) as Card[];
+      const json = await catalog('cards', { q: `(${s}) (${price})`, pageSize: '250', page: String(page), select: 'id,images,set,tcgplayer' });
+      const data = (json.data ?? []) as Card[];
       data.forEach((c) => {
         const p = marketPrice(c) ?? 0;
         const have = out[c.set.id];

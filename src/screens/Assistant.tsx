@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../theme';
 import { Btn, Body, PageHead, Panel, Screen, SearchBox } from '../ui';
 import { ChatMessage } from '../types';
 import { formatDate, formatMoney, marketPrice } from '../api';
-import { askAssistant, getStatus, KeyStatus } from '../server';
+import { askAssistantStream, getStatus, KeyStatus } from '../server';
 import { assistantContext } from '../portfolio';
 import { Card } from '../types';
 import { useStore } from '../store';
@@ -57,27 +57,53 @@ export default function Assistant() {
     return assistantContext(owned, sealed, sales, recent, extra);
   };
 
+  const sending = useRef(false);
+  const stop = useRef<AbortController | null>(null);
+  const [live, setLive] = useState('');
+
   const send = async (text: string) => {
     const q = text.trim();
-    if (!q || busy) return;
+    // a ref (not state) so a double tap or Enter + click in the same instant cannot send twice
+    if (!q || sending.current) return;
+    sending.current = true;
     const id = String(Date.now());
-    const next: ChatMessage[] = [...msgs, { id, role: 'user', text: q }];
-    setMsgs(next);
+    const history: ChatMessage[] = [...msgs, { id, role: 'user', text: q }];
+    // the assistant's bubble is added now and filled in as the answer arrives
+    setMsgs([...history, { id: id + 'a', role: 'assistant', text: '' }]);
     setInput('');
     setBusy(true);
+    setLive('');
+    const ctl = new AbortController();
+    stop.current = ctl;
+    let got = '';
     try {
-      const reply = await askAssistant(
-        next.map((m) => ({ role: m.role, text: m.text })),
+      const lookups = await askAssistantStream(
+        history.filter((m) => m.text).map((m) => ({ role: m.role, text: m.text })),
         buildContext(),
+        {
+          onText: (d) => {
+            got += d;
+            setMsgs((m) => m.map((x) => (x.id === id + 'a' ? { ...x, text: got } : x)));
+          },
+          onStatus: setLive,
+        },
+        ctl.signal,
       );
-      setMsgs((m) => [...m, { id: id + 'a', role: 'assistant', text: reply }]);
+      if (lookups.length) {
+        got += `\n\nLive lookups used: ${lookups.join('; ')}`;
+        setMsgs((m) => m.map((x) => (x.id === id + 'a' ? { ...x, text: got } : x)));
+      }
     } catch (e: any) {
       const why = e?.notConfigured
         ? 'The assistant is off until the Gemini key is added on the server (GEMINI_API_KEY).'
         : e?.message ?? 'Something went wrong. Try again.';
-      setMsgs((m) => [...m, { id: id + 'a', role: 'assistant', text: why }]);
+      // keep whatever part of the answer already arrived, and say what went wrong
+      setMsgs((m) => m.map((x) => (x.id === id + 'a' ? { ...x, text: got ? `${got}\n\n(Stopped: ${why})` : why, error: !got } : x)));
     } finally {
+      sending.current = false;
+      stop.current = null;
       setBusy(false);
+      setLive('');
     }
   };
 
@@ -89,7 +115,8 @@ export default function Assistant() {
         text="Deal checks, your collection, recorded market history and general collecting questions — in a single conversation that remembers what you already asked."
       />
       <View style={{ flexDirection: 'row', gap: 12 }}>
-        <Btn label="New" icon="chatbox-ellipses-outline" kind="gold" onPress={() => setMsgs([])} />
+        <Btn label="New" icon="chatbox-ellipses-outline" kind="gold" disabled={busy} onPress={() => setMsgs([])} />
+        {busy ? <Btn label="Stop" icon="stop-circle-outline" onPress={() => stop.current?.abort()} /> : null}
       </View>
       <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
         {status === null
@@ -130,7 +157,14 @@ export default function Assistant() {
               padding: 12,
             }}
           >
-            <Text style={{ color: colors.text, fontSize: 16, lineHeight: 22 }}>{m.text}</Text>
+            {m.text ? (
+              <Text selectable style={{ color: m.error ? colors.red : colors.text, fontSize: 16, lineHeight: 22 }}>{m.text}</Text>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.amber} size="small" />
+                <Text style={{ color: colors.muted }}>{live || 'Thinking…'}</Text>
+              </View>
+            )}
           </View>
         ))}
         {msgs.length === 0
@@ -150,7 +184,7 @@ export default function Assistant() {
               </View>
             ))
           : null}
-        {busy ? <Text style={{ color: colors.muted }}>Thinking…</Text> : null}
+        {busy && live && msgs[msgs.length - 1]?.text ? <Text style={{ color: colors.muted }}>{live}</Text> : null}
         {msgs.length === 0 ? (
           <View
             style={{
@@ -175,7 +209,7 @@ export default function Assistant() {
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="Ask anything"
+            placeholder={busy ? 'Waiting for the answer…' : 'Ask a follow-up or anything'}
             placeholderTextColor={colors.muted}
             onSubmitEditing={() => send(input)}
             style={{
@@ -191,7 +225,8 @@ export default function Assistant() {
           />
           <Pressable
             onPress={() => send(input)}
-            style={{ backgroundColor: colors.gold, borderRadius: 24, padding: 12 }}
+            disabled={busy}
+            style={{ backgroundColor: colors.gold, borderRadius: 24, padding: 12, opacity: busy ? 0.5 : 1 }}
           >
             <Ionicons name="arrow-up" size={20} color="#1a1405" />
           </Pressable>

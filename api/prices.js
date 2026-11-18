@@ -1,6 +1,7 @@
 const { limited, send } = require('./_util');
 
-const { findSeries, normalizeCard, listOf, num, ppt } = require('./_pricing');
+const { normalizeCard, listOf, ppt } = require('./_pricing');
+const { sealedFromProviders } = require('./_providers');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return send(res, 405, { error: 'GET only' });
@@ -23,22 +24,28 @@ module.exports = async (req, res) => {
       return send(res, 200, { ok: true, cards });
     }
     if (action === 'sealed') {
-      const params = { search: String(q.q || '') };
-      if (q.set) params.set = String(q.set);
-      if (!params.search && !params.set) return send(res, 400, { error: 'Type a product name or choose a set.' });
-      const json = await call('sealed-products', params);
-      if (q.debug === '1') return send(res, 200, { debug: json });
-      const items = listOf(json).map((p) => ({
-        id: p.tcgPlayerId || p.id || null,
-        name: p.name,
-        setName: p.setName || (p.set && p.set.name) || null,
-        type: p.productType || p.type || null,
-        market: num(p.marketPrice ?? (p.prices && p.prices.market)),
-        low: num(p.lowPrice ?? (p.prices && p.prices.low)),
-        updatedAt: p.lastPriceUpdate || p.updatedAt || null,
-        history: findSeries(p.priceHistory) || null,
-      }));
-      return send(res, 200, { ok: true, items });
+      const search = String(q.q || '');
+      const set = q.set ? String(q.set) : '';
+      if (!search && !set) return send(res, 400, { error: 'Type a product name or choose a set.' });
+      const r = await sealedFromProviders({ search, set });
+      if (!r.configured) {
+        return send(res, 503, {
+          error: 'PRICE_API_KEY is not set on the server, so sealed prices are off.',
+          notConfigured: true,
+        });
+      }
+      if (q.debug === '1') return send(res, 200, { debug: r.debug, errors: r.errors });
+      if (r.items.length === 0 && r.errors.length) {
+        const e = r.errors[0];
+        const keyProblem = e.status === 401 || e.status === 403 || /key/i.test(e.message);
+        return send(res, keyProblem ? 401 : 502, {
+          error: keyProblem
+            ? `The price service rejected PRICE_API_KEY (${e.message}). Check the key in Vercel: it must be the full key from your pokemonpricetracker.com account.`
+            : `The price service had a problem: ${e.message}`,
+          errors: r.errors,
+        });
+      }
+      return send(res, 200, { ok: true, items: r.items, errors: r.errors, fetchedAt: new Date().toISOString() });
     }
     return send(res, 400, { error: 'Unknown action.' });
   } catch (e) {
