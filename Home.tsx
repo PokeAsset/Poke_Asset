@@ -229,3 +229,5 @@ const h = themed(() => StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
   cards: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 }));
+
+
