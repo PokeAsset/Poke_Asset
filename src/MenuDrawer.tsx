@@ -17,11 +17,15 @@ const stub = (title: string, eyebrow: string): [string, object] => ['Placeholder
 
 export const MENU: { section: string; items: Item[] }[] = [
   {
+    section: 'Account',
+    items: [{ label: 'Account / Sign in', icon: 'person-circle-outline', go: ['Account'] }],
+  },
+  {
     section: 'Catalog',
     items: [
       { label: 'Card database', icon: 'search-outline', go: ['CardDatabase'] },
-      { label: 'Sets & checklists', icon: 'layers-outline', go: ['Sets'] },
-      { label: 'Sealed products', icon: 'cube-outline', go: ['Sealed'] },
+      { label: 'Card sets by era', icon: 'layers-outline', go: ['Sets'] },
+      { label: 'Sealed products by set', icon: 'cube-outline', go: ['Sealed'] },
       { label: 'Sealed scanner', icon: 'barcode-outline', go: ['SealedScan'] },
     ],
   },

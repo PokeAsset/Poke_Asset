@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { applyTheme, colors, Mode } from './src/theme';
 import { ThemeModeCtx } from './src/themeMode';
 import { StoreProvider } from './src/store';
+import { AuthProvider } from './src/auth';
+import { CloudProvider } from './src/cloud';
 import MenuDrawer from './src/MenuDrawer';
 import Home from './src/screens/Home';
 import Assistant from './src/screens/Assistant';
@@ -23,7 +25,8 @@ import CardDetail from './src/screens/CardDetail';
 import { CardDatabase, Placeholder } from './src/screens/Misc';
 import Wishlist from './src/screens/Wishlist';
 import Sets, { SetDetail } from './src/screens/Sets';
-import Sealed from './src/screens/Sealed';
+import Sealed, { SealedSet } from './src/screens/Sealed';
+import Account from './src/screens/Account';
 
 export const rootRef = createNavigationContainerRef<any>();
 const Tab = createBottomTabNavigator();
@@ -114,7 +117,9 @@ export default function App() {
   return (
     <ThemeModeCtx.Provider value={{ mode, toggle }}>
       <SafeAreaProvider>
+        <AuthProvider>
         <StoreProvider>
+        <CloudProvider>
           {/* key remounts the screens so every style picks up the new colours; navigation state is restored */}
           <NavigationContainer key={mode} theme={navTheme} ref={rootRef} initialState={navState.current}>
             <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
@@ -125,6 +130,8 @@ export default function App() {
               <Stack.Screen name="Sets" component={Sets} />
               <Stack.Screen name="SetDetail" component={SetDetail} />
               <Stack.Screen name="Sealed" component={Sealed} />
+              <Stack.Screen name="SealedSet" component={SealedSet} />
+              <Stack.Screen name="Account" component={Account} />
               <Stack.Screen name="Wishlist" component={Wishlist} />
               <Stack.Screen name="SealedScan" component={SealedScan} />
               <Stack.Screen name="Grade" component={Grade} />
@@ -134,7 +141,9 @@ export default function App() {
             </Stack.Navigator>
             <MenuDrawer navigation={drawerNav} />
           </NavigationContainer>
+        </CloudProvider>
         </StoreProvider>
+        </AuthProvider>
       </SafeAreaProvider>
     </ThemeModeCtx.Provider>
   );

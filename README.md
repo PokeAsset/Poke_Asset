@@ -46,11 +46,24 @@ Keys live in Vercel, never in the app code. Vercel → your project → Settings
 | --- | --- |
 | `GEMINI_API_KEY` | AI assistant, card scanner, sealed scanner, PokéGrade photo read (Google Gemini) |
 | `PRICE_API_KEY` | Graded (PSA/CGC/BGS/SGC) prices, price history, sealed products (pokemonpricetracker.com v2 API) |
-| `GEMINI_MODEL` | optional, defaults to `gemini-2.5-flash` |
+| `GEMINI_MODEL` | optional, defaults to `gemini-3.8-flash` |
+| `SUPABASE_URL` | Accounts + cloud-saved portfolio (Supabase project URL) |
+| `SUPABASE_ANON_KEY` | Accounts: the project's public anon / publishable key (never the service_role key) |
 
 After adding or changing a variable, redeploy (Deployments → ⋯ → Redeploy).
 
 If a feature's key is missing the app says so on screen instead of showing made-up numbers.
+
+## Accounts (email + password)
+Menu → Account. Powered by Supabase Auth; the app talks to Supabase directly, so passwords never touch this
+server. One-time setup: create a free Supabase project, run `supabase/setup.sql` in its SQL Editor, add
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` in Vercel, and set Authentication → URL Configuration → Site URL to your
+site address. `/api/status` shows `accounts: true` when it is connected. Row-level security keeps each person's
+portfolio private.
+
+## Sealed prices
+Sealed products are listed per set. Prices come from the price service (`PRICE_API_KEY`). TCGplayer has no public
+price API, so products without a price show "No price on file" and a "Check on TCGplayer" search link. Nothing is guessed.
 
 ## Theme
 The sun/moon button in the header switches dark and light and remembers the choice.
@@ -61,5 +74,7 @@ See the Vercel "Deployment Protection" setting (turn Vercel Authentication off),
 in `public/index.html`, `public/robots.txt` and `public/sitemap.xml`.
 
 ## Browse
-Menu → Sets & checklists → pick an era → pick a set → Singles / Sealed tabs. Every row has "+ Add".
+Home → View Pokémon card sets (or Menu → Card sets by era) → pick an era → pick a set → Singles / Sealed tabs. Every row has "+ Add".
 Eras are defined in `src/eras.ts`; add a series name there if the catalog introduces a new one.
+
+Sealed products: Menu → Sealed products by set → pick an era → pick a set.

@@ -38,7 +38,7 @@ async function readBody(req) {
   }
 }
 
-const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 /** Calls Gemini's generateContent. Returns the text of the first candidate. */
 async function gemini({ system, parts, json }) {

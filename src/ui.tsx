@@ -349,6 +349,7 @@ export function Screen({
         <View style={{ flexDirection: 'row', gap: narrow ? 6 : 10, flexShrink: 0 }}>
           {!narrow ? icon('notifications-outline', () => nav.navigate('Tabs', { screen: 'Alerts' })) : null}
           {!narrow ? icon('sparkles-outline', () => nav.navigate('Tabs', { screen: 'Assistant' })) : null}
+          {!narrow ? icon('person-circle-outline', () => nav.navigate('Account')) : null}
           {icon('scan-outline', () => nav.navigate('Tabs', { screen: 'Scan' }), true)}
           {icon(theme.mode === 'dark' ? 'sunny-outline' : 'moon-outline', theme.toggle)}
           {icon('menu-outline', () => setMenuOpen(true))}

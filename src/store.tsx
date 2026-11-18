@@ -7,6 +7,21 @@ import { combinedTotals, todayKey, upsertSnapshot } from './portfolio';
 
 export type RefreshResult = { ok: boolean; updated: number; error?: string };
 
+/** Everything that is saved on the device and, for signed-in people, in their cloud portfolio. */
+export type StoredData = {
+  owned: OwnedEntry[];
+  wishlist: WishlistEntry[];
+  alerts: AlertEntry[];
+  listings: Listing[];
+  recent: string[];
+  snapshots: Snapshot[];
+  lastRefreshed: string | null;
+  extras: Record<string, GradedInfo>;
+  history: Record<string, HistoryPoint[]>;
+  sealed: SealedEntry[];
+  sales: SaleEntry[];
+};
+
 type Store = {
   ready: boolean;
   owned: OwnedEntry[];
@@ -51,6 +66,10 @@ type Store = {
   triggered: AlertEntry[];
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
+  /** the whole saved state in one object (used for cloud sync) */
+  data: StoredData;
+  /** Replace the saved state. Pass null to empty it. */
+  loadData: (d: Partial<StoredData> | null) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -80,40 +99,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const latest = useRef({ owned, wishlist, alerts, sealed });
   latest.current = { owned, wishlist, alerts, sealed };
 
+  /** Loads a saved-state object (from this device or the cloud), tolerating missing or old fields. */
+  const applyRaw = useCallback((s: any) => {
+    const d = s && typeof s === 'object' ? s : {};
+    setOwned(
+      ((d.owned ?? []) as OwnedEntry[]).map((e) => ({
+        ...e,
+        qty: typeof e.qty === 'number' && e.qty >= 1 ? e.qty : 1,
+        cost: typeof e.cost === 'number' ? e.cost : 0,
+      })),
+    );
+    setWishlist((d.wishlist ?? []) as WishlistEntry[]);
+    setAlerts(((d.alerts ?? []) as AlertEntry[]).map((a) => ({ ...a, createdOn: a.createdOn ?? todayKey() })));
+    setListings((d.listings ?? []) as Listing[]);
+    setRecent((d.recent ?? []) as string[]);
+    setSnapshots((d.snapshots ?? []) as Snapshot[]);
+    setLastRefreshed((d.lastRefreshed ?? null) as string | null);
+    setExtrasState((d.extras ?? {}) as Record<string, GradedInfo>);
+    setHistory((d.history ?? {}) as Record<string, HistoryPoint[]>);
+    setSealed((d.sealed ?? []) as SealedEntry[]);
+    setSales((d.sales ?? []) as SaleEntry[]);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
         let raw = await AsyncStorage.getItem(KEY);
         if (!raw) raw = await AsyncStorage.getItem(OLD_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
-          setOwned(
-            ((s.owned ?? []) as OwnedEntry[]).map((e) => ({
-              ...e,
-              qty: typeof e.qty === 'number' && e.qty >= 1 ? e.qty : 1,
-              cost: typeof e.cost === 'number' ? e.cost : 0,
-            })),
-          );
-          setWishlist((s.wishlist ?? []) as WishlistEntry[]);
-          setAlerts(
-            ((s.alerts ?? []) as AlertEntry[]).map((a) => ({ ...a, createdOn: a.createdOn ?? todayKey() })),
-          );
-          setListings((s.listings ?? []) as Listing[]);
-          setRecent((s.recent ?? []) as string[]);
-          setSnapshots((s.snapshots ?? []) as Snapshot[]);
-          setLastRefreshed((s.lastRefreshed ?? null) as string | null);
-          setExtrasState((s.extras ?? {}) as Record<string, GradedInfo>);
-          setHistory((s.history ?? {}) as Record<string, HistoryPoint[]>);
-          setSealed((s.sealed ?? []) as SealedEntry[]);
-          setSales((s.sales ?? []) as SaleEntry[]);
-        }
+        if (raw) applyRaw(JSON.parse(raw));
       } catch {
         // Corrupt or unavailable storage: start empty rather than crash.
       } finally {
         setReady(true);
       }
     })();
-  }, []);
+  }, [applyRaw]);
 
   useEffect(() => {
     if (!ready) return;
@@ -122,6 +142,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       JSON.stringify({ owned, wishlist, alerts, listings, recent, snapshots, lastRefreshed, extras, history, sealed, sales }),
     ).catch(() => {});
   }, [owned, wishlist, alerts, listings, recent, snapshots, lastRefreshed, extras, history, sealed, sales, ready]);
+
+  const data = useMemo<StoredData>(
+    () => ({ owned, wishlist, alerts, listings, recent, snapshots, lastRefreshed, extras, history, sealed, sales }),
+    [owned, wishlist, alerts, listings, recent, snapshots, lastRefreshed, extras, history, sealed, sales],
+  );
+  const loadData = useCallback((d: Partial<StoredData> | null) => applyRaw(d ?? {}), [applyRaw]);
 
   const logActivity = useCallback((text: string) => {
     setRecent((r) => [text, ...r].slice(0, 20));
@@ -230,6 +256,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       triggered,
       menuOpen,
       setMenuOpen,
+      data,
+      loadData,
       logActivity,
       refreshPrices,
       sealed,
@@ -315,6 +343,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     applyFresh,
     setExtras,
     menuOpen,
+    data,
+    loadData,
     logActivity,
     refreshPrices,
   ]);

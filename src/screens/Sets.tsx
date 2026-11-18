@@ -1,159 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
 import { Btn, Empty, Loading, PageHead, Panel, Screen, SearchBox, Select } from '../ui';
-import { fetchEraArt, fetchSetCards, fetchSets, formatDate, formatMoney, marketPrice, SetArt, SetInfo } from '../api';
-import { EraGroup, ERAS, groupByEra } from '../eras';
+import { fetchSetCards, formatDate, formatMoney, marketPrice, SetInfo } from '../api';
+import { SetBrowser } from '../setUi';
 import { searchSealed, SealedItem } from '../server';
+import { SealedProducts } from '../sealedUi';
 import { Card } from '../types';
 import { useStore } from '../store';
 
-/* ---------- shared bits ---------- */
-
-/** A picture of a card, cropped to its artwork, with an optional dark wash and a logo on top. */
-function Banner({ art, logo, height, name }: { art?: SetArt | { small: string; large: string }; logo?: string; height: number; name: string }) {
-  return (
-    <View style={{ height, overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.tintBlue, alignItems: 'center', justifyContent: 'center' }}>
-      {art ? (
-        <Image
-          source={{ uri: art.large }}
-          style={{ position: 'absolute', top: -height * 0.18, left: 0, width: '100%', aspectRatio: 0.716 }}
-          resizeMode="cover"
-        />
-      ) : null}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: art ? 'rgba(0,0,0,0.38)' : 'transparent' }} />
-      {logo ? (
-        <Image source={{ uri: logo }} style={{ width: '82%', height: height * 0.62 }} resizeMode="contain" />
-      ) : (
-        <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16, textAlign: 'center', paddingHorizontal: 8 }}>{name}</Text>
-      )}
-    </View>
-  );
-}
-
-function SetTile({ set, art, have, onPress }: { set: SetInfo; art?: SetArt; have: number; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={{ width: '48.5%', gap: 8 }}>
-      <Banner art={art} logo={set.images?.logo} height={118} name={set.name} />
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' }} numberOfLines={2}>
-        {set.name}
-      </Text>
-      <Text style={{ color: have > 0 ? colors.amber : colors.muted, fontSize: 12, textAlign: 'center', marginTop: -4 }}>
-        {formatDate(set.releaseDate)} · {have > 0 ? `${have}/${set.total} owned` : `${set.total} cards`}
-      </Text>
-    </Pressable>
-  );
-}
-
-function useOwnedBySet() {
-  const { owned } = useStore();
-  return useMemo(() => {
-    const m = new Map<string, Set<string>>();
-    owned.forEach((e) => {
-      const s = m.get(e.card.set.id) ?? new Set<string>();
-      s.add(e.card.id);
-      m.set(e.card.set.id, s);
-    });
-    return m;
-  }, [owned]);
-}
-
-function EraSection({ era, onOpen }: { era: EraGroup; onOpen: (s: SetInfo) => void }) {
-  const have = useOwnedBySet();
-  const [art, setArt] = useState<Record<string, SetArt>>({});
-  useEffect(() => {
-    const series = ERAS.find((e) => e.id === era.id)?.series ?? [];
-    let live = true;
-    fetchEraArt(series).then((a) => live && setArt(a));
-    return () => {
-      live = false;
-    };
-  }, [era.id]);
-  const first = era.sets[0];
-  return (
-    <View style={{ gap: 14 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        {first?.images?.logo ? <Image source={{ uri: first.images.logo }} style={{ width: 120, height: 44 }} resizeMode="contain" /> : null}
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{era.name}</Text>
-          <Text style={{ color: colors.muted, fontSize: 13 }}>{era.sets.length} sets</Text>
-        </View>
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'space-between' }}>
-        {era.sets.map((s) => (
-          <SetTile key={s.id} set={s} art={art[s.id]} have={have.get(s.id)?.size ?? 0} onPress={() => onOpen(s)} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ---------- Sets page: era chips, search, grids of sets ---------- */
+/* ---------- Sets page: era chips, search, grids of sets with logos ---------- */
 
 export default function Sets() {
   const nav = useNavigation<any>();
-  const [sets, setSets] = useState<SetInfo[]>([]);
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState('');
-  const [q, setQ] = useState('');
-  const [era, setEra] = useState<string>('');
-  const have = useOwnedBySet();
-
-  useEffect(() => {
-    fetchSets()
-      .then(setSets)
-      .catch((e) => setError(e?.message ?? 'Could not load sets.'))
-      .finally(() => setBusy(false));
-  }, []);
-
-  const eras = useMemo(() => groupByEra(sets), [sets]);
-  const active = era || eras[0]?.id || '';
-  const found = q.trim() ? sets.filter((s) => s.name.toLowerCase().includes(q.trim().toLowerCase())) : [];
-  const open = (s: SetInfo) => nav.navigate('SetDetail', { set: s });
-
   return (
     <Screen>
-      <PageHead eyebrow="Browse" title="Sets" text="English sets, newest first. Pick an era, then a set." />
-      <SearchBox value={q} onChangeText={setQ} placeholder="Find a set…" />
-      {busy ? <Loading /> : null}
-      {error ? <Text style={{ color: colors.red }}>{error}</Text> : null}
-
-      {q.trim() ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'space-between' }}>
-          {found.length === 0 && !busy ? <Empty icon="search-outline" text="No set has that name." /> : null}
-          {found.map((s) => (
-            <SetTile key={s.id} set={s} have={have.get(s.id)?.size ?? 0} onPress={() => open(s)} />
-          ))}
-        </View>
-      ) : (
-        <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-            {[...eras.map((e) => ({ id: e.id, name: e.name })), { id: 'all', name: 'All eras' }].map((e) => {
-              const on = active === e.id;
-              return (
-                <Pressable
-                  key={e.id}
-                  onPress={() => setEra(e.id)}
-                  style={{
-                    borderWidth: 1,
-                    borderRadius: radius.pill,
-                    paddingHorizontal: 14,
-                    paddingVertical: 9,
-                    borderColor: on ? colors.tintGoldBorder : colors.border,
-                    backgroundColor: on ? colors.tintGold : 'transparent',
-                  }}
-                >
-                  <Text style={{ color: on ? colors.gold : colors.text, fontWeight: '600' }}>{e.name}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          {(active === 'all' ? eras : eras.filter((e) => e.id === active)).map((e) => (
-            <EraSection key={e.id} era={e} onOpen={open} />
-          ))}
-        </>
-      )}
+      <PageHead eyebrow="Browse" title="Card sets" text="Every English set, newest first. Pick an era, then a set to see its cards." />
+      <SetBrowser mode="cards" showSearch onOpen={(s) => nav.navigate('SetDetail', { set: s })} />
     </Screen>
   );
 }
@@ -178,7 +42,7 @@ function Tab({ label, count, on, onPress }: { label: string; count?: number | nu
 export function SetDetail({ route }: any) {
   const nav = useNavigation<any>();
   const set: SetInfo = route.params.set;
-  const { owned, addOwned, sealed, addSealed } = useStore();
+  const { owned, addOwned } = useStore();
   const [tab, setTab] = useState<'cards' | 'sealed'>('cards');
 
   const [cards, setCards] = useState<Card[]>([]);
@@ -246,13 +110,6 @@ export function SetDetail({ route }: any) {
     addOwned({ card: c, qty: 1, cost: 0, graded: false, condition: 'Near Mint' });
     setNotice(`Added ${c.name}. Open My cards to set what you paid.`);
   };
-  const addSealedItem = (p: SealedItem) => {
-    addSealed({ productId: p.id, name: p.name, setName: p.setName ?? set.name, type: p.type, qty: 1, cost: 0, market: p.market, updatedAt: p.updatedAt });
-    setNotice(`Added ${p.name}. Open My cards to set what you paid.`);
-  };
-  const sealedCount = (p: SealedItem) =>
-    sealed.filter((s) => (p.id != null && s.productId === p.id) || (p.id == null && s.name === p.name)).reduce((n, s) => n + s.qty, 0);
-
   return (
     <Screen>
       {/* header card, like PokéData */}
@@ -387,43 +244,9 @@ export function SetDetail({ route }: any) {
         <>
           {sBusy ? <Loading /> : null}
           {sError ? <Text style={{ color: colors.red, lineHeight: 22 }}>{sError}</Text> : null}
-          <Panel style={{ gap: 14 }}>
-            {!sBusy && items && items.length === 0 ? (
-              <Empty icon="cube-outline" text="No sealed products found for this set. Try the Sealed products page and search by name." />
-            ) : null}
-            {(items ?? []).map((p, i) => (
-              <View
-                key={`${p.id ?? p.name}-${i}`}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
-              >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ color: colors.text, fontSize: 16 }}>{p.name}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 13 }}>
-                    {[p.type, p.updatedAt ? `updated ${formatDate(p.updatedAt)}` : null].filter(Boolean).join(' · ')}
-                  </Text>
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    Market {formatMoney(p.market)}
-                    {p.low != null ? ` · Low ${formatMoney(p.low)}` : ''}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => addSealedItem(p)}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: sealedCount(p) > 0 ? colors.tintGoldBorder : colors.border,
-                    backgroundColor: sealedCount(p) > 0 ? colors.tintGold : colors.card,
-                    borderRadius: radius.pill,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <Text style={{ color: sealedCount(p) > 0 ? colors.gold : colors.text, fontWeight: '700', fontSize: 13 }}>
-                    {sealedCount(p) > 0 ? `+ Add (${sealedCount(p)})` : '+ Add'}
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-          </Panel>
+          {!sBusy && !sError ? (
+            <SealedProducts items={items ?? []} setName={set.name} empty="No sealed products found for this set. Try the Sealed products page and search by name." />
+          ) : null}
         </>
       )}
     </Screen>

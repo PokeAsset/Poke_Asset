@@ -5,6 +5,7 @@ module.exports = async (req, res) => {
   send(res, 200, {
     gemini: !!process.env.GEMINI_API_KEY,
     prices: !!process.env.PRICE_API_KEY,
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    accounts: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   });
 };

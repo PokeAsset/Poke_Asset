@@ -130,7 +130,20 @@ export default function Home() {
         </Panel>
       ) : (
         <>
+          <Pressable onPress={() => nav.navigate('Sets')} style={[h.wide, { borderColor: colors.tintGoldBorder }]}>
+            <View style={h.toolIcon}>
+              <Ionicons name="layers-outline" size={26} color={colors.amber} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={h.toolTitle}>View Pokémon card sets</Text>
+              <Text style={h.toolSub}>Every era and set, with logos, cards and your progress</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={colors.muted} />
+          </Pressable>
+
           <View style={h.grid}>
+            {tool('Sealed products', 'Booster boxes, ETBs by set', 'cube-outline', () => nav.navigate('Sealed'))}
+            {tool('Account', 'Sign in, save your collection', 'person-circle-outline', () => nav.navigate('Account'))}
             {tool('AI Assistant', 'Deals, collection, history', 'sparkles-outline', () =>
               nav.navigate('Tabs', { screen: 'Assistant' }),
             )}
@@ -205,6 +218,15 @@ const h = themed(() => StyleSheet.create({
   },
   badgeText: { color: colors.amber, fontWeight: '700', letterSpacing: 3, fontSize: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  wide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    backgroundColor: colors.card,
+  },
   tool: {
     width: '48.5%',
     flexDirection: 'row',

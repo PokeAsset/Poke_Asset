@@ -1,25 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
-import { colors } from '../theme';
-import { Chip, Empty, Loading, PageHead, Panel, Screen, SearchBox } from '../ui';
-import { formatDate, formatMoney } from '../api';
+import { Image, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { colors, radius } from '../theme';
+import { Chip, Loading, PageHead, Screen, SearchBox } from '../ui';
+import { formatDate, SetInfo } from '../api';
 import { searchSealed, SealedItem } from '../server';
-import { PriceChart } from '../charts';
+import { SetBrowser } from '../setUi';
+import { SealedProducts } from '../sealedUi';
 
 const QUICK = ['Booster Box', 'Elite Trainer Box', 'Booster Bundle', 'Ultra Premium Collection', 'Tin', 'Build & Battle'];
 
-/** Sealed products catalog, searched by name or set through the price service. */
+/**
+ * Sealed products catalog. Browse by era and set (logos, like the card sets page), or search by product name.
+ */
 export default function Sealed() {
+  const nav = useNavigation<any>();
   const [q, setQ] = useState('');
   const [items, setItems] = useState<SealedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  const searching = q.trim().length >= 2;
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) {
+    if (!searching) {
       setItems([]);
       setError('');
       return;
@@ -43,45 +48,76 @@ export default function Sealed() {
       <PageHead
         eyebrow="Catalog"
         title="Sealed products"
-        text="Booster boxes, Elite Trainer Boxes, bundles, tins and collections from every set. Search by product name or set."
+        text="Booster boxes, Elite Trainer Boxes, bundles, tins and collections, organized by era and set. Pick a set, or search by name."
       />
-      <SearchBox value={q} onChangeText={setQ} placeholder="Search a set or product (e.g. Base Set, 151)" />
+      <SearchBox value={q} onChangeText={setQ} placeholder="Search a set or product (e.g. 151, Booster Box)" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {QUICK.map((t) => (
           <Chip key={t} label={t} onPress={() => setQ(t)} />
         ))}
       </View>
+
+      {/* sets that match what you typed (or every era when the box is empty) */}
+      <SetBrowser mode="sealed" query={q} onOpen={(s) => nav.navigate('SealedSet', { set: s })} />
+
+      {searching ? (
+        <>
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>Products matching “{q.trim()}”</Text>
+          {busy ? <Loading /> : null}
+          {error ? <Text style={{ color: colors.red, lineHeight: 22 }}>{error}</Text> : null}
+          {!busy && !error ? <SealedProducts items={items} empty="No sealed products match that search." /> : null}
+        </>
+      ) : null}
+    </Screen>
+  );
+}
+
+/** One set's sealed products, grouped by kind. Opened from the sealed catalog. */
+export function SealedSet({ route }: any) {
+  const set: SetInfo = route.params.set;
+  const [items, setItems] = useState<SealedItem[] | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        let list = await searchSealed('', set.name);
+        if (list.length === 0) list = await searchSealed(set.name);
+        if (live) setItems(list);
+      } catch (e: any) {
+        if (live) setError(e?.message ?? 'Could not load sealed products.');
+      } finally {
+        if (live) setBusy(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [set.name]);
+
+  return (
+    <Screen>
+      <View style={{ borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16, gap: 8 }}>
+        {set.images?.logo ? <Image source={{ uri: set.images.logo }} style={{ width: 190, height: 70 }} resizeMode="contain" /> : null}
+        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800' }}>{set.name}</Text>
+        <Text style={{ color: colors.muted }}>
+          {set.series} · {formatDate(set.releaseDate)} · sealed products
+        </Text>
+      </View>
       {busy ? <Loading /> : null}
       {error ? <Text style={{ color: colors.red, lineHeight: 22 }}>{error}</Text> : null}
-      <Panel style={{ gap: 14 }}>
-        {items.length === 0 && !busy ? (
-          <Empty icon="cube-outline" text="Search to see products and their market prices." />
-        ) : (
-          items.map((p, i) => {
-            const key = `${p.id ?? p.name}-${i}`;
-            return (
-              <View key={key} style={{ gap: 4, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                <Text style={{ color: colors.text, fontSize: 17 }} onPress={() => setOpen(open === key ? null : key)}>
-                  {p.name}
-                </Text>
-                <Text style={{ color: colors.muted }}>
-                  {[p.setName, p.type].filter(Boolean).join(' · ')}
-                  {p.updatedAt ? ` · updated ${formatDate(p.updatedAt)}` : ''}
-                </Text>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>
-                  Market {formatMoney(p.market)}
-                  {p.low != null ? ` · Low ${formatMoney(p.low)}` : ''}
-                </Text>
-                {open === key ? (
-                  <View style={{ marginTop: 8 }}>
-                    <PriceChart series={[{ label: 'Market', points: p.history ?? [] }]} note="No price history for this product." />
-                  </View>
-                ) : null}
-              </View>
-            );
-          })
-        )}
-      </Panel>
+      {!busy && !error ? (
+        <SealedProducts
+          items={items ?? []}
+          setName={set.name}
+          empty="No sealed products were found for this set. Try the search box on the Sealed products page."
+        />
+      ) : null}
+      <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
+        Prices are the market prices the price service reports. If a product shows no price, use “Check on TCGplayer” to look it up there.
+      </Text>
     </Screen>
   );
 }

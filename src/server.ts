@@ -55,7 +55,7 @@ export async function askAssistant(messages: { role: string; text: string }[], c
   return r.lookups && r.lookups.length ? `${text}\n\nLive lookups used: ${r.lookups.join('; ')}` : text;
 }
 
-export type KeyStatus = { gemini: boolean; prices: boolean; model: string };
+export type KeyStatus = { gemini: boolean; prices: boolean; accounts?: boolean; model: string };
 
 /** Which server keys are connected (true/false only, never the keys themselves). */
 export async function getStatus(): Promise<KeyStatus> {
@@ -174,3 +174,16 @@ export async function searchSealed(q: string, set?: string): Promise<SealedItem[
   if (set) params.set('set', set);
   return (await call<{ items: SealedItem[] }>(`/api/prices?${params.toString()}`)).items ?? [];
 }
+
+/* ---------------- accounts ---------------- */
+
+export type AuthConfig = { enabled: boolean; url?: string; anonKey?: string };
+
+/** Whether accounts are set up on the server (Supabase address + public key). */
+export async function getAuthConfig(): Promise<AuthConfig> {
+  return call<AuthConfig>('/api/config');
+}
+
+/** TCGplayer search page for a product, so you can check its price there. */
+export const tcgplayerUrl = (name: string) =>
+  `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&view=grid&q=${encodeURIComponent(name)}`;
