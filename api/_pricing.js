@@ -97,7 +97,8 @@ async function ppt(path, params) {
     throw e;
   }
   const url = `${BASE}/${path}?${new URLSearchParams(params).toString()}`;
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+  const { fetchTimeout } = require('./_util');
+  const r = await fetchTimeout(url, { headers: { Authorization: `Bearer ${key}` } }, 20000);
   const text = await r.text();
   let json;
   try {

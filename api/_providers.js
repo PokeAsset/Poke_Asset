@@ -17,12 +17,36 @@ function variantOf(name) {
   return out.length ? out.join(', ') : null;
 }
 
+/** Reads a price from whichever field the service uses. Checks known names first, then any numeric field whose name says market/unopened/low. */
+function pickPrice(p, kind) {
+  const pr = p && typeof p.prices === 'object' && p.prices ? p.prices : {};
+  const names = kind === 'low'
+    ? ['lowPrice', 'low', 'lowestPrice', 'unopenedLow']
+    : ['marketPrice', 'unopenedPrice', 'market', 'unopened', 'price', 'currentPrice'];
+  for (const src of [p, pr]) {
+    for (const k of names) {
+      const v = num(src[k]);
+      if (v != null) return v;
+    }
+  }
+  const re = kind === 'low' ? /low/i : /market|unopened/i;
+  for (const src of [p, pr]) {
+    for (const k of Object.keys(src)) {
+      if (re.test(k) && !/history|date|updated|count|seller|change|pct|percent/i.test(k)) {
+        const v = num(src[k]);
+        if (v != null) return v;
+      }
+    }
+  }
+  return null;
+}
+
 const pokemonPriceTracker = {
   id: 'pokemonpricetracker',
   label: 'PokemonPriceTracker',
   configured: () => !!process.env.PRICE_API_KEY,
   async sealed({ search, set }) {
-    const params = {};
+    const params = { limit: 100 };
     if (search) params.search = String(search);
     if (set) params.set = String(set);
     const json = await ppt('sealed-products', params);
@@ -37,10 +61,10 @@ const pokemonPriceTracker = {
       setName: p.setName || (p.set && p.set.name) || null,
       type: p.productType || p.type || null,
       variant: variantOf(p.name),
-      market: num(p.marketPrice ?? (p.prices && p.prices.market)),
-      low: num(p.lowPrice ?? (p.prices && p.prices.low)),
-      updatedAt: p.lastPriceUpdate || p.updatedAt || null,
-      history: findSeries(p.priceHistory) || null,
+      market: pickPrice(p, 'market'),
+      low: pickPrice(p, 'low'),
+      updatedAt: p.lastPriceUpdate || p.lastUpdated || p.updatedAt || (p.prices && (p.prices.lastUpdated || p.prices.updatedAt)) || null,
+      history: findSeries(p.priceHistory || p.history || (p.prices && p.prices.history)) || null,
       source: 'PokemonPriceTracker (TCGplayer-based market data)',
       provider: 'pokemonpricetracker',
     })) };
