@@ -1,6 +1,51 @@
 const { send, limited, fetchTimeout, gemini } = require('./_util');
 const { sealedFromProviders } = require('./_providers');
 
+// Lists the Gemini models this key can use and times a tiny request on each, so the fastest one can be chosen.
+async function compareModels(req, res, base) {
+  if (limited(req, 4)) return send(res, 429, { error: 'Too many tests. Wait a minute.' });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return send(res, 200, { models: [], error: 'GEMINI_API_KEY is not set.' });
+  let names = [];
+  try {
+    const r = await fetchTimeout('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }, 15000);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return send(res, 200, { models: [], error: (j.error && j.error.message) || `Google answered ${r.status}` });
+    names = (j.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => String(m.name || '').replace(/^models\//, ''))
+      .filter((n) => /^gemini/.test(n) && !/(image|tts|embedding|live|audio|robotics|computer|customtools|native)/i.test(n));
+  } catch (e) {
+    return send(res, 200, { models: [], error: e.message || 'Could not list models.' });
+  }
+  // prefer light / flash models, newest names first, at most 6
+  const rank = (n) => (/lite/.test(n) ? 0 : /flash/.test(n) ? 1 : 2);
+  names = names.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a)).slice(0, 6);
+  if (!names.includes(base.model)) names = [base.model, ...names.slice(0, 5)];
+  const results = await Promise.all(
+    names.map(async (model) => {
+      const t = Date.now();
+      try {
+        const r = await fetchTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }),
+          },
+          30000,
+        );
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { model, ok: false, ms: Date.now() - t, message: String((j.error && j.error.message) || r.status).slice(0, 140) };
+        return { model, ok: true, ms: Date.now() - t, message: 'answered' };
+      } catch (e) {
+        return { model, ok: false, ms: Date.now() - t, message: e.message || 'failed' };
+      }
+    }),
+  );
+  send(res, 200, { current: base.model, models: results.sort((a, b) => (a.ok === b.ok ? a.ms - b.ms : a.ok ? -1 : 1)) });
+}
+
 // Tells the app which keys are connected (true/false only, never a key).
 // With ?test=1 it also makes one tiny live call to each service and reports what each one said.
 module.exports = async (req, res) => {
@@ -11,6 +56,7 @@ module.exports = async (req, res) => {
     model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   };
   const q = req.query || {};
+  if (q.test === 'models') return compareModels(req, res, base);
   if (q.test !== '1') return send(res, 200, base);
   if (limited(req, 6)) return send(res, 429, { error: 'Too many tests. Wait a minute.' });
 

@@ -165,6 +165,14 @@ export async function askAssistantStream(
 export type TestResult = { ok: boolean; ms: number; message: string };
 export type Diagnostics = KeyStatus & { tests: { gemini: TestResult; prices: TestResult; catalog: TestResult; accounts: TestResult } };
 
+export type ModelTime = { model: string; ok: boolean; ms: number; message: string };
+export type ModelCompare = { current?: string; models: ModelTime[]; error?: string };
+
+/** Times a tiny request on each Gemini model this key can use. */
+export async function compareModels(): Promise<ModelCompare> {
+  return call<ModelCompare>('/api/status?test=models');
+}
+
 /** Makes one small live call to each service and reports what each one said (no keys are returned). */
 export async function runDiagnostics(): Promise<Diagnostics> {
   return call<Diagnostics>('/api/status?test=1');

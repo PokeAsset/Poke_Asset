@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { Btn, PageHead, Panel, Screen } from '../ui';
-import { Diagnostics, runDiagnostics, TestResult } from '../server';
+import { compareModels, Diagnostics, ModelCompare, runDiagnostics, TestResult } from '../server';
 
 const ROWS: { id: keyof Diagnostics['tests']; label: string; fix: string }[] = [
   { id: 'gemini', label: 'Gemini assistant', fix: 'Vercel → Settings → Environment Variables: check GEMINI_API_KEY (and GEMINI_MODEL), then Redeploy.' },
@@ -31,6 +31,8 @@ export default function DataHealth() {
   const [d, setD] = useState<Diagnostics | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [cmp, setCmp] = useState<ModelCompare | null>(null);
+  const [cmpBusy, setCmpBusy] = useState(false);
 
   const run = async () => {
     setBusy(true);
@@ -41,6 +43,18 @@ export default function DataHealth() {
       setError(e?.message ?? 'The test could not run.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const compare = async () => {
+    setCmpBusy(true);
+    setError('');
+    try {
+      setCmp(await compareModels());
+    } catch (e: any) {
+      setError(e?.message ?? 'The comparison could not run.');
+    } finally {
+      setCmpBusy(false);
     }
   };
 
@@ -55,6 +69,26 @@ export default function DataHealth() {
         <Btn kind="gold" icon="pulse-outline" label={busy ? 'Testing…' : d ? 'Test again' : 'Run connection tests'} disabled={busy} onPress={run} />
       </View>
       {error ? <Text style={{ color: colors.red }}>{error}</Text> : null}
+      <Panel style={{ gap: 8 }}>
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Is Gemini slow? Compare models</Text>
+        <Text style={{ color: colors.muted, lineHeight: 20 }}>
+          Times a tiny question on each Gemini model your key can use (takes up to 30 seconds). Then set GEMINI_MODEL in Vercel to the fastest one that answered.
+        </Text>
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Btn icon="speedometer-outline" label={cmpBusy ? 'Timing models…' : 'Compare Gemini models'} disabled={cmpBusy} onPress={compare} />
+        </View>
+        {cmp?.error ? <Text style={{ color: colors.red }}>{cmp.error}</Text> : null}
+        {cmp?.models.map((m) => (
+          <View key={m.model} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingVertical: 4 }}>
+            <Ionicons name={m.ok ? 'checkmark-circle' : 'close-circle'} size={18} color={m.ok ? colors.green : colors.red} />
+            <Text style={{ color: colors.text, flex: 1 }} selectable>
+              {m.model}
+              {m.model === cmp.current ? '  (in use now)' : ''}
+            </Text>
+            <Text style={{ color: m.ok ? colors.muted : colors.red, fontSize: 13 }}>{m.ok ? `${(m.ms / 1000).toFixed(1)} s` : m.message}</Text>
+          </View>
+        ))}
+      </Panel>
       {d ? (
         <Panel>
           {ROWS.map((r) => (
