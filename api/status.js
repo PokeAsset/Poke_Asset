@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
     }),
     timed(async () => {
       if (!base.prices) throw new Error('PRICE_API_KEY is not set.');
-      const r = await sealedFromProviders({ search: 'booster box', set: '' });
+      const r = await sealedFromProviders({ search: 'booster box', set: '', limit: 1 });
       if (r.errors.length && !r.items.length) throw new Error(`${r.errors[0].provider}: ${r.errors[0].message}${r.errors[0].status ? ` (${r.errors[0].status})` : ''}`);
       return `${r.items.length} sealed products returned, ${r.items.filter((i) => i.market != null).length} with a price.`;
     }),

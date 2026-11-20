@@ -45,8 +45,9 @@ const pokemonPriceTracker = {
   id: 'pokemonpricetracker',
   label: 'PokemonPriceTracker',
   configured: () => !!process.env.PRICE_API_KEY,
-  async sealed({ search, set }) {
-    const params = { limit: 100 };
+  async sealed({ search, set, limit }) {
+    // the service charges credits per product returned, so ask for no more than is needed
+    const params = { limit: Math.max(1, Math.min(Number(limit) || 30, 60)) };
     if (search) params.search = String(search);
     if (set) params.set = String(set);
     const json = await ppt('sealed-products', params);

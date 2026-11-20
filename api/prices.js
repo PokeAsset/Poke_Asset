@@ -27,7 +27,7 @@ module.exports = async (req, res) => {
       const search = String(q.q || '');
       const set = q.set ? String(q.set) : '';
       if (!search && !set) return send(res, 400, { error: 'Type a product name or choose a set.' });
-      const r = await sealedFromProviders({ search, set });
+      const r = await sealedFromProviders({ search, set, limit: q.limit });
       if (!r.configured) {
         return send(res, 503, {
           error: 'PRICE_API_KEY is not set on the server, so sealed prices are off.',
@@ -45,6 +45,8 @@ module.exports = async (req, res) => {
           errors: r.errors,
         });
       }
+      // identical requests are answered from the edge cache for 6 hours, which saves the price service's daily credits
+      if (!r.errors.length && r.items.length) res.setHeader('Cache-Control', 'public, s-maxage=21600, stale-while-revalidate=3600');
       return send(res, 200, { ok: true, items: r.items, errors: r.errors, fetchedAt: new Date().toISOString() });
     }
     return send(res, 400, { error: 'Unknown action.' });
