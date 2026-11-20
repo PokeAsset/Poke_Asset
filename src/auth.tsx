@@ -276,7 +276,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           headers: {
             'Content-Type': 'application/json',
             apikey: c.anonKey,
-            Authorization: `Bearer ${s ? s.accessToken : c.anonKey}`,
+            // new-style publishable keys (sb_publishable_…) are not tokens: send them only in `apikey`
+            ...(s ? { Authorization: `Bearer ${s.accessToken}` } : c.anonKey.startsWith('eyJ') ? { Authorization: `Bearer ${c.anonKey}` } : {}),
             ...((init.headers as Record<string, string>) ?? {}),
           },
         });

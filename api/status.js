@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
     timed(async () => {
       if (!base.accounts) throw new Error('SUPABASE_URL / SUPABASE_ANON_KEY are not set.');
       const url = process.env.SUPABASE_URL.replace(/\/$/, '');
-      const r = await fetchTimeout(`${url}/rest/v1/listings?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` } }, 15000);
+      const r = await fetchTimeout(`${url}/rest/v1/listings?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, ...(process.env.SUPABASE_ANON_KEY.startsWith('eyJ') ? { Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` } : {}) } }, 15000);
       if (r.status === 404 || r.status === 400) throw new Error('Connected, but the marketplace tables are missing. Run supabase/marketplace.sql.');
       if (!r.ok) throw new Error(`Supabase answered ${r.status}`);
       return 'Supabase and the marketplace tables are reachable.';
