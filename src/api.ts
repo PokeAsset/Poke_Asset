@@ -324,3 +324,8 @@ export function fetchEraArt(series: string[]): Promise<Record<string, SetArt>> {
   artCache.set(key, result);
   return result;
 }
+
+/** Opens the card on TCGplayer (their own page, so the live price can be checked there). */
+export const cardTcgplayerUrl = (card: Card): string =>
+  card.tcgplayer?.url ||
+  `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&view=grid&q=${encodeURIComponent(`${card.name} ${(card.number ?? '').split('/')[0]}`.trim())}`;

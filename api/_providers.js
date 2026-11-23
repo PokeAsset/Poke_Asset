@@ -58,6 +58,9 @@ const pokemonPriceTracker = {
     }
     return { debug: json, items: listOf(json).filter((p) => p && p.name).map((p) => ({
       id: p.tcgPlayerId || p.id || null,
+      tcgPlayerId: p.tcgPlayerId || null,
+      imageUrl: p.imageUrl || p.imageCdnUrl || p.image || (p.images && (p.images.large || p.images.small)) ||
+        (p.tcgPlayerId ? `https://product-images.tcgplayer.com/fit-in/437x437/${p.tcgPlayerId}.jpg` : null),
       name: String(p.name),
       setName: p.setName || (p.set && p.set.name) || null,
       type: p.productType || p.type || null,

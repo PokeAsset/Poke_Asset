@@ -199,6 +199,7 @@ export default function Home() {
           </Panel>
         </>
       )}
+      <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>Created by Arya Dharminkumar Bidja</Text>
     </Screen>
   );
 }

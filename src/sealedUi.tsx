@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { colors, radius } from './theme';
-import { Empty, Panel } from './ui';
+import { Ionicons } from '@expo/vector-icons';
+import { Empty, Panel, Select } from './ui';
 import { formatDate, formatMoney } from './api';
 import { SealedItem, tcgplayerUrl } from './server';
 import { useStore } from './store';
@@ -25,6 +26,26 @@ const ORDER = [...KINDS.map((k) => k.label), 'Other sealed'];
 function open(url: string) {
   Linking.openURL(url).catch(() => {});
 }
+
+/** Product photo; shows a plain box if there is no photo or it does not load. */
+function ProductPhoto({ uri }: { uri?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const box = { width: 84, height: 84, borderRadius: 10, backgroundColor: colors.tintSlot, alignItems: 'center' as const, justifyContent: 'center' as const, overflow: 'hidden' as const };
+  if (!uri || failed) {
+    return (
+      <View style={box}>
+        <Ionicons name="cube-outline" size={30} color={colors.muted} />
+      </View>
+    );
+  }
+  return (
+    <View style={box}>
+      <Image source={{ uri }} style={{ width: 84, height: 84 }} resizeMode="contain" onError={() => setFailed(true)} />
+    </View>
+  );
+}
+
+const SORTS = ['Price: high to low', 'Price: low to high', 'Name A–Z'];
 
 const Small = ({ text, on, onPress }: { text: string; on?: boolean; onPress: () => void }) => (
   <Pressable
@@ -50,6 +71,7 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
   const { sealed, addSealed } = useStore();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [sort, setSort] = useState(SORTS[0]);
 
   const groups = useMemo(() => {
     const m = new Map<string, SealedItem[]>();
@@ -59,9 +81,15 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
     });
     return ORDER.filter((k) => m.has(k)).map((k) => ({
       label: k,
-      items: (m.get(k) ?? []).sort((a, b) => (b.market ?? -1) - (a.market ?? -1)),
+      items: (m.get(k) ?? []).sort((a, b) => {
+        if (sort === 'Name A–Z') return a.name.localeCompare(b.name);
+        if (a.market == null && b.market == null) return 0;
+        if (a.market == null) return 1; // no price goes last
+        if (b.market == null) return -1;
+        return sort === 'Price: low to high' ? a.market - b.market : b.market - a.market;
+      }),
     }));
-  }, [items]);
+  }, [items, sort]);
 
   const owned = (p: SealedItem) =>
     sealed.filter((s) => (p.id != null && s.productId === p.id) || (p.id == null && s.name === p.name)).reduce((n, s) => n + s.qty, 0);
@@ -82,6 +110,9 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
   return (
     <View style={{ gap: 16 }}>
       {notice ? <Text style={{ color: colors.amber }}>{notice}</Text> : null}
+      <View style={{ maxWidth: 260 }}>
+        <Select value={sort} options={SORTS} onChange={setSort} />
+      </View>
       {groups.map((g) => (
         <View key={g.label} style={{ gap: 8 }}>
           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>
@@ -92,7 +123,9 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
               const key = `${g.label}-${p.id ?? p.name}-${i}`;
               const n = owned(p);
               return (
-                <View key={key} style={{ gap: 6, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <View key={key} style={{ flexDirection: 'row', gap: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                  <ProductPhoto uri={p.imageUrl} />
+                  <View style={{ flex: 1, gap: 6 }}>
                   <Pressable onPress={() => setOpenKey(openKey === key ? null : key)}>
                     <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{p.name}</Text>
                   </Pressable>
@@ -129,6 +162,7 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
                       <PriceChart series={[{ label: 'Market', points: p.history ?? [] }]} note="No price history for this product." />
                     </View>
                   ) : null}
+                  </View>
                 </View>
               );
             })}

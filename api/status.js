@@ -91,9 +91,13 @@ module.exports = async (req, res) => {
       if (!base.accounts) throw new Error('SUPABASE_URL / SUPABASE_ANON_KEY are not set.');
       const url = process.env.SUPABASE_URL.replace(/\/$/, '');
       const r = await fetchTimeout(`${url}/rest/v1/listings?select=id&limit=1`, { headers: { apikey: process.env.SUPABASE_ANON_KEY, ...(process.env.SUPABASE_ANON_KEY.startsWith('eyJ') ? { Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` } : {}) } }, 15000);
-      if (r.status === 404 || r.status === 400) throw new Error('Connected, but the marketplace tables are missing. Run supabase/marketplace.sql.');
-      if (!r.ok) throw new Error(`Supabase answered ${r.status}`);
-      return 'Supabase and the marketplace tables are reachable.';
+      const host = new URL(url).hostname;
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        const said = [j.code, j.message || j.hint].filter(Boolean).join(': ').slice(0, 220);
+        throw new Error(`Supabase project ${host.split('.')[0]} answered ${r.status}${said ? ` (${said})` : ''}. ${r.status === 404 || r.status === 400 ? 'If you already ran marketplace.sql, check this project ID matches the one in your Supabase dashboard.' : ''}`);
+      }
+      return `Supabase project ${host.split('.')[0]} and the marketplace tables are reachable.`;
     }),
   ]);
   send(res, 200, { ...base, tests: { gemini: tests[0], prices: tests[1], catalog: tests[2], accounts: tests[3] } });

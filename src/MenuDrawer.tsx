@@ -102,6 +102,7 @@ export default function MenuDrawer({ navigation }: { navigation: any }) {
             <Ionicons name="search-outline" size={16} color={colors.muted} />
             <Text style={{ color: colors.muted, fontSize: 15 }}>Tip: search works from any page</Text>
           </View>
+          <Text style={{ color: colors.muted, fontSize: 13, paddingHorizontal: 18, paddingBottom: 18 }}>Created by Arya Dharminkumar Bidja</Text>
         </View>
       </View>
     </Modal>

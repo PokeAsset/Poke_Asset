@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, mono, radius, themed } from '../theme';
 import { Btn, Panel, Screen, PageHead } from '../ui';
 import EntryForm from '../EntryForm';
@@ -8,7 +8,7 @@ import { loadFreshCards } from '../prices';
 import { fetchGraded } from '../server';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../types';
-import { formatDate, formatMoney, marketPrice, priceDetail, variantList } from '../api';
+import { cardTcgplayerUrl, formatDate, formatMoney, marketPrice, priceDetail, variantList } from '../api';
 import { Chip } from '../ui';
 import { useStore } from '../store';
 
@@ -179,6 +179,7 @@ export default function CardDetail({ route }: any) {
           disabled={busy}
           onPress={refreshNow}
         />
+        <Btn icon="open-outline" label="Check price on TCGplayer" onPress={() => Linking.openURL(cardTcgplayerUrl(card)).catch(() => {})} />
         {liveMsg.map((m) => (
           <Text key={m} style={{ color: colors.muted, fontSize: 14 }}>
             {m}

@@ -1,6 +1,7 @@
 {
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
+  "crons": [{ "path": "/api/refresh", "schedule": "0 9 * * *" }],
   "functions": {
     "api/*.js": { "maxDuration": 60 }
   },

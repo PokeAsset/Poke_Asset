@@ -2,6 +2,7 @@ const { limited, send } = require('./_util');
 
 const { normalizeCard, listOf, ppt } = require('./_pricing');
 const { sealedFromProviders } = require('./_providers');
+const cache = require('./_cache');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return send(res, 405, { error: 'GET only' });
@@ -27,6 +28,17 @@ module.exports = async (req, res) => {
       const search = String(q.q || '');
       const set = q.set ? String(q.set) : '';
       if (!search && !set) return send(res, 400, { error: 'Type a product name or choose a set.' });
+      // saved copy first: it costs no credits and is the same for every visitor. "fresh=1" (Refresh button) asks the service again.
+      if (cache.configured() && q.fresh !== '1') {
+        try {
+          const saved = await cache.readSealed({ set, search });
+          if (saved.length) {
+            res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
+            const newest = saved.map((x) => x.fetchedAt).filter(Boolean).sort().pop();
+            return send(res, 200, { ok: true, items: saved, errors: [], cached: true, fetchedAt: newest || new Date().toISOString() });
+          }
+        } catch (e) { /* cache problem: fall through to the live service */ }
+      }
       const r = await sealedFromProviders({ search, set, limit: q.limit });
       if (!r.configured) {
         return send(res, 503, {
@@ -45,6 +57,7 @@ module.exports = async (req, res) => {
           errors: r.errors,
         });
       }
+      if (cache.configured() && r.items.length) cache.saveSealed(r.items, set || null).catch(() => {});
       // identical requests are answered from the edge cache for 6 hours, which saves the price service's daily credits
       if (!r.errors.length && r.items.length) res.setHeader('Cache-Control', 'public, s-maxage=21600, stale-while-revalidate=3600');
       return send(res, 200, { ok: true, items: r.items, errors: r.errors, fetchedAt: new Date().toISOString() });

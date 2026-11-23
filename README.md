@@ -95,3 +95,10 @@ Home → View Pokémon card sets (or Menu → Card sets by era) → pick an era 
 Eras are defined in `src/eras.ts`; add a series name there if the catalog introduces a new one.
 
 Sealed products: Menu → Sealed products by set → pick an era → pick a set.
+
+## Shared price cache (update 14)
+
+- Run `supabase/prices.sql` once in the Supabase SQL editor.
+- Vercel env vars (server only): `SUPABASE_SERVICE_KEY` (the Supabase secret key), `CRON_SECRET` (any long random text), optional `REFRESH_CREDITS` (credits to use per daily run, default 80).
+- `vercel.json` runs `/api/refresh` daily. It saves sealed prices set by set, and after a full pass waits 14 days before the next. Open `/api/refresh?key=<CRON_SECRET>` to run it by hand (add `&force=1` to restart a pass).
+- The app reads saved prices first; the Refresh button asks the price service again and saves the result.

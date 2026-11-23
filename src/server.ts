@@ -294,6 +294,8 @@ export type SealedItem = {
   variant?: string | null;
   /** where the price came from, shown next to it */
   source?: string | null;
+  /** photo of the product, when the price service or TCGplayer has one */
+  imageUrl?: string | null;
 };
 
 export type SealedResult = { items: SealedItem[]; fetchedAt: string; warnings: string[] };

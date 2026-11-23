@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
 import { Btn, Empty, Loading, PageHead, Panel, Screen, SearchBox, Select } from '../ui';
-import { fetchSetCards, formatDate, formatMoney, marketPrice, SetInfo } from '../api';
+import { cardTcgplayerUrl, fetchSetCards, formatDate, formatMoney, marketPrice, SetInfo } from '../api';
 import { SetBrowser } from '../setUi';
 import { searchSealed, SealedItem } from '../server';
 import { SealedProducts } from '../sealedUi';
@@ -58,6 +58,7 @@ export function SetDetail({ route }: any) {
   const [items, setItems] = useState<SealedItem[] | null>(null);
   const [sBusy, setSBusy] = useState(false);
   const [sError, setSError] = useState('');
+  const [sort, setSort] = useState('Price: high to low');
 
   useEffect(() => {
     fetchSetCards(set.id)
@@ -83,7 +84,7 @@ export function SetDetail({ route }: any) {
     })();
   }, [tab]);
 
-  useEffect(() => setLimit(PAGE), [q, rarity, seg]);
+  useEffect(() => setLimit(PAGE), [q, rarity, seg, sort]);
 
   const count = useMemo(() => {
     const m = new Map<string, number>();
@@ -94,10 +95,20 @@ export function SetDetail({ route }: any) {
     () => ['All rarities', ...Array.from(new Set(cards.map((c) => c.rarity).filter((r): r is string => !!r))).sort()],
     [cards],
   );
+  const SORT_OPTIONS = ['Price: high to low', 'Price: low to high', 'Card number'];
   const filtered = cards
     .filter((c) => rarity === 'All rarities' || c.rarity === rarity)
     .filter((c) => seg === 'All cards' || (seg === 'Owned') === ((count.get(c.id) ?? 0) > 0))
-    .filter((c) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()) || c.number === q.trim());
+    .filter((c) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()) || c.number === q.trim())
+    .sort((a, b) => {
+      if (sort === 'Card number') return 0; // keep the order the set came in
+      const pa = marketPrice(a);
+      const pb = marketPrice(b);
+      if (pa == null && pb == null) return 0;
+      if (pa == null) return 1; // cards without a price always go last
+      if (pb == null) return -1;
+      return sort === 'Price: low to high' ? pa - pb : pb - pa;
+    });
   const shown = filtered.slice(0, limit);
 
   const ownedDistinct = cards.filter((c) => (count.get(c.id) ?? 0) > 0).length;
@@ -184,6 +195,9 @@ export function SetDetail({ route }: any) {
             <View style={{ flex: 1, minWidth: 150 }}>
               <Select value={seg} options={['All cards', 'Owned', 'Missing']} onChange={setSeg} />
             </View>
+            <View style={{ flex: 1, minWidth: 150 }}>
+              <Select value={sort} options={SORT_OPTIONS} onChange={setSort} />
+            </View>
           </View>
           <View style={{ alignSelf: 'flex-start' }}>
             <Btn
@@ -234,6 +248,9 @@ export function SetDetail({ route }: any) {
                     #{c.number} · {c.rarity ?? 'Card'}
                   </Text>
                   <Text style={{ color: colors.text, fontWeight: '700' }}>{formatMoney(marketPrice(c))}</Text>
+                  <Pressable onPress={() => Linking.openURL(cardTcgplayerUrl(c)).catch(() => {})}>
+                    <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '700' }}>Check on TCGplayer ↗</Text>
+                  </Pressable>
                 </Pressable>
               );
             })}
