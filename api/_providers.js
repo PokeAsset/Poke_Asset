@@ -1,6 +1,7 @@
 // Sealed-product price providers. Each provider returns items in one shape, so another legitimate source
 // can be added here later without touching the screens. Never scrape a site and never invent a price.
 const { num, listOf, findSeries, ppt } = require('./_pricing');
+const { fetchTimeout } = require('./_util');
 
 /** Pulls edition / variant words out of a product name so prices stay with the right version. */
 function variantOf(name) {
@@ -75,9 +76,82 @@ const pokemonPriceTracker = {
   },
 };
 
+
+/** Finds {avg, low} for the TCGplayer source (or eBay if that is all there is) inside PokeTrace's nested prices object. */
+function poketracePrice(prices) {
+  const found = { tcgplayer: null, ebay: null };
+  const walk = (o, depth) => {
+    if (!o || typeof o !== 'object' || depth > 5) return;
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if ((k === 'tcgplayer' || k === 'ebay') && v && typeof v === 'object' && !found[k] && (num(v.avg) != null || num(v.low) != null)) found[k] = v;
+      else walk(v, depth + 1);
+    }
+  };
+  walk(prices, 0);
+  const hit = found.tcgplayer || found.ebay;
+  if (!hit) return null;
+  return { market: num(hit.avg), low: num(hit.low), from: found.tcgplayer ? 'TCGplayer' : 'eBay sales' };
+}
+
+const slug = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+const pokeTrace = {
+  id: 'poketrace',
+  label: 'PokeTrace',
+  gapMs: 2100, // free plan allows 1 request every 2 seconds
+  configured: () => !!process.env.POKETRACE_API_KEY,
+  async call(params) {
+    const qs = new URLSearchParams({ product_type: 'sealed', market: 'US', ...params }).toString();
+    const r = await fetchTimeout(`https://api.poketrace.com/v2/cards?${qs}`, { headers: { 'X-API-Key': process.env.POKETRACE_API_KEY, Accept: 'application/json' } }, 20000);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const e = new Error(r.status === 429 ? 'PokeTrace is busy or the daily limit is used up. Try again in a few seconds.' : (j.message || j.error || `PokeTrace answered ${r.status}`));
+      e.status = r.status;
+      throw e;
+    }
+    return j;
+  },
+  async sealed({ search, set, limit }) {
+    const lim = String(Math.max(1, Math.min(Number(limit) || 30, 50)));
+    let json;
+    let cost = 1;
+    if (set) {
+      json = await this.call({ set: slug(set), limit: lim });
+      if (!listOf(json).length) { // the set filter may want a different spelling: fall back to a name search
+        cost += 1;
+        json = await this.call({ search: String(set), limit: lim });
+      }
+    } else {
+      json = await this.call({ search: String(search || ''), limit: lim });
+    }
+    const items = listOf(json).filter((p) => p && p.name).map((p) => {
+      const pr = poketracePrice(p.prices);
+      const tid = (p.refs && p.refs.tcgplayerId) || null;
+      return {
+        id: tid || p.id || null,
+        tcgPlayerId: tid,
+        imageUrl: p.image || (tid ? `https://product-images.tcgplayer.com/fit-in/437x437/${tid}.jpg` : null),
+        name: String(p.name),
+        setName: (p.set && p.set.name) || null,
+        type: String(p.productFamily || p.productType || '').replace(/_/g, ' ') || null,
+        variant: variantOf(p.name),
+        market: pr ? pr.market : num(p.market),
+        low: pr ? pr.low : null,
+        updatedAt: p.lastUpdated || null,
+        history: null,
+        source: `PokeTrace (${pr ? pr.from : 'TCGplayer'} prices)`,
+        provider: 'poketrace',
+      };
+    });
+    return { debug: json, items, cost };
+  },
+};
+
 // Add more providers here (each needs a legitimate, licensed API). TCGplayer itself is not listed because
 // it does not give new API access to apps, and scraping it is not allowed.
-const PROVIDERS = [pokemonPriceTracker];
+// First configured provider that returns products wins; the next one is only a fallback.
+const PROVIDERS = [pokeTrace, pokemonPriceTracker];
 
 /** Runs every configured provider; one failing does not stop the others. */
 async function sealedFromProviders(args) {
@@ -88,8 +162,8 @@ async function sealedFromProviders(args) {
   for (const p of active) {
     try {
       const r = await p.sealed(args);
-      items.push(...r.items);
       debug = r.debug;
+      if (r.items.length) { items.push(...r.items); break; }
     } catch (e) {
       errors.push({ provider: p.label, status: e.status || null, message: e.message || 'failed' });
     }
@@ -97,4 +171,4 @@ async function sealedFromProviders(args) {
   return { items, errors, configured: active.length > 0, debug };
 }
 
-module.exports = { PROVIDERS, sealedFromProviders, variantOf };
+module.exports = { PROVIDERS, sealedFromProviders, variantOf, poketracePrice };

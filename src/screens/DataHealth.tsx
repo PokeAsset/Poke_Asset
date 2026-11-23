@@ -7,7 +7,7 @@ import { compareModels, Diagnostics, ModelCompare, runDiagnostics, TestResult } 
 
 const ROWS: { id: keyof Diagnostics['tests']; label: string; fix: string }[] = [
   { id: 'gemini', label: 'Gemini assistant', fix: 'Vercel → Settings → Environment Variables: check GEMINI_API_KEY (and GEMINI_MODEL), then Redeploy.' },
-  { id: 'prices', label: 'Sealed and graded prices', fix: 'Vercel: check PRICE_API_KEY is the full key from your pokemonpricetracker.com account, then Redeploy.' },
+  { id: 'prices', label: 'Sealed and graded prices', fix: 'Vercel: check POKETRACE_API_KEY (or PRICE_API_KEY) is the full key copied from your price service account, then Redeploy.' },
   { id: 'catalog', label: 'Card catalog (pokemontcg.io)', fix: 'Usually temporary. Optionally add POKEMONTCG_API_KEY (free at dev.pokemontcg.io) in Vercel.' },
   { id: 'accounts', label: 'Accounts and marketplace (Supabase)', fix: 'Add SUPABASE_URL and SUPABASE_ANON_KEY in Vercel, and run supabase/setup.sql and supabase/marketplace.sql.' },
 ];

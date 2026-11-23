@@ -23,6 +23,7 @@ import Market from './src/screens/Market';
 import SaleStaging from './src/screens/SaleStaging';
 import Store from './src/screens/Store';
 import MyOrders from './src/screens/MyOrders';
+import EbayListings from './src/screens/EbayListings';
 import MarketOps from './src/screens/MarketOps';
 import DataHealth from './src/screens/DataHealth';
 import Trade from './src/screens/Trade';
@@ -144,6 +145,7 @@ export default function App() {
               <Stack.Screen name="SaleStaging" component={SaleStaging} />
               <Stack.Screen name="Store" component={Store} />
               <Stack.Screen name="MyOrders" component={MyOrders} />
+              <Stack.Screen name="EbayListings" component={EbayListings} />
               <Stack.Screen name="MarketOps" component={MarketOps} />
               <Stack.Screen name="DataHealth" component={DataHealth} />
               <Stack.Screen name="Trade" component={Trade} />

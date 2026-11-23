@@ -47,6 +47,7 @@ export const MENU: { section: string; items: Item[] }[] = [
       { label: 'Live shop', icon: 'pricetag-outline', go: stub('Live shop', 'Community') },
       { label: 'Store', icon: 'storefront-outline', go: ['Store'] },
       { label: 'My orders', icon: 'receipt-outline', go: ['MyOrders'] },
+      { label: 'eBay listings', icon: 'pricetags-outline', go: ['EbayListings'] },
     ],
   },
   {

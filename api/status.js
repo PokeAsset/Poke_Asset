@@ -51,7 +51,8 @@ async function compareModels(req, res, base) {
 module.exports = async (req, res) => {
   const base = {
     gemini: !!process.env.GEMINI_API_KEY,
-    prices: !!process.env.PRICE_API_KEY,
+    prices: !!(process.env.POKETRACE_API_KEY || process.env.PRICE_API_KEY),
+    ebay: !!(process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET),
     accounts: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
     model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   };
@@ -77,7 +78,7 @@ module.exports = async (req, res) => {
       return `Answered (${t.slice(0, 20)}) using ${base.model}.`;
     }),
     timed(async () => {
-      if (!base.prices) throw new Error('PRICE_API_KEY is not set.');
+      if (!base.prices) throw new Error('No price key is set (POKETRACE_API_KEY or PRICE_API_KEY).');
       const r = await sealedFromProviders({ search: 'booster box', set: '', limit: 1 });
       if (r.errors.length && !r.items.length) throw new Error(`${r.errors[0].provider}: ${r.errors[0].message}${r.errors[0].status ? ` (${r.errors[0].status})` : ''}`);
       return `${r.items.length} sealed products returned, ${r.items.filter((i) => i.market != null).length} with a price.`;

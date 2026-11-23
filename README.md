@@ -45,6 +45,7 @@ Keys live in Vercel, never in the app code. Vercel → your project → Settings
 | Name | What it turns on |
 | --- | --- |
 | `GEMINI_API_KEY` | AI assistant, card scanner, sealed scanner, PokéGrade photo read (Google Gemini) |
+| `POKETRACE_API_KEY` | Sealed product prices and photos from PokeTrace (api.poketrace.com, header X-API-Key). Tried first; free plan is personal use only, Pro ($19.99/mo) allows commercial use |
 | `PRICE_API_KEY` | Graded (PSA/CGC/BGS/SGC) prices, price history, sealed products (pokemonpricetracker.com v2 API) |
 | `POKEMONTCG_API_KEY` | optional: free key from dev.pokemontcg.io, makes the card catalog faster and less likely to time out |
 | `GEMINI_THINKING` | optional: `minimal` or `low` makes Gemini 3 models answer faster |
@@ -102,3 +103,7 @@ Sealed products: Menu → Sealed products by set → pick an era → pick a set.
 - Vercel env vars (server only): `SUPABASE_SERVICE_KEY` (the Supabase secret key), `CRON_SECRET` (any long random text), optional `REFRESH_CREDITS` (credits to use per daily run, default 80).
 - `vercel.json` runs `/api/refresh` daily. It saves sealed prices set by set, and after a full pass waits 14 days before the next. Open `/api/refresh?key=<CRON_SECRET>` to run it by hand (add `&force=1` to restart a pass).
 - The app reads saved prices first; the Refresh button asks the price service again and saves the result.
+
+## eBay listings (update 15)
+
+Menu → Community → eBay listings (also a button on the Marketplace page). Uses eBay's official Browse API through `api/ebay.js`. Set `EBAY_CLIENT_ID` (App ID) and `EBAY_CLIENT_SECRET` (Cert ID) from the **Production** keyset in Vercel. Each listing opens on eBay; PokéAsset does not handle payment.

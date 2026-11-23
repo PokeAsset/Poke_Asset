@@ -42,7 +42,7 @@ module.exports = async (req, res) => {
       const r = await sealedFromProviders({ search, set, limit: q.limit });
       if (!r.configured) {
         return send(res, 503, {
-          error: 'PRICE_API_KEY is not set on the server, so sealed prices are off.',
+          error: 'No price key is set on the server (POKETRACE_API_KEY or PRICE_API_KEY), so sealed prices are off.',
           notConfigured: true,
         });
       }
@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
         const keyProblem = e.status === 401 || e.status === 403 || /key/i.test(e.message);
         return send(res, keyProblem ? 401 : 502, {
           error: keyProblem
-            ? `The price service rejected PRICE_API_KEY (${e.message}). Check the key in Vercel: it must be the full key from your pokemonpricetracker.com account.`
+            ? `The price service (${e.provider}) rejected its key (${e.message}). Check the key in Vercel: it must be the full key copied from that service's account page.`
             : `The price service had a problem: ${e.message}`,
           errors: r.errors,
         });

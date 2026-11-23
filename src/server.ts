@@ -339,3 +339,24 @@ export async function getAuthConfig(): Promise<AuthConfig> {
 /** TCGplayer search page for a product, so you can check its price there. */
 export const tcgplayerUrl = (name: string) =>
   `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&view=grid&q=${encodeURIComponent(name)}`;
+
+/* ---------------- eBay listings (official Browse API through the server) ---------------- */
+
+export type EbayItem = {
+  id: string;
+  title: string;
+  price: number | null;
+  currency: string | null;
+  image: string | null;
+  condition: string | null;
+  seller: string | null;
+  sellerFeedback: string | null;
+  shipping: number | null;
+  buyingOptions: string[];
+  url: string;
+};
+
+export async function searchEbay(q: string, sort: string, type: 'all' | 'cards', offset = 0): Promise<{ items: EbayItem[]; total: number }> {
+  const params = new URLSearchParams({ q, sort, type, offset: String(offset) });
+  return call<{ items: EbayItem[]; total: number }>(`/api/ebay?${params.toString()}`);
+}

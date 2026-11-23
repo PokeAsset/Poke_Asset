@@ -62,6 +62,7 @@ export default function Marketplace() {
         <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <Btn kind="gold" icon="storefront-outline" label="Open the Store" onPress={() => nav.navigate('Store')} />
           <Btn icon="pricetag-outline" label="Sell from my collection" onPress={() => nav.navigate('SaleStaging')} />
+          <Btn icon="search-outline" label="Browse eBay listings" onPress={() => nav.navigate('EbayListings')} />
         </View>
       </Panel>
       <View style={{ flexDirection: 'row' }}>

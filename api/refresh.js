@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
   if (given !== secret) return send(res, 401, { error: 'Not allowed.' });
   if (!cache.configured()) return send(res, 503, { error: 'Set SUPABASE_URL and SUPABASE_SERVICE_KEY in Vercel first.' });
   const provider = PROVIDERS.find((p) => p.configured());
-  if (!provider) return send(res, 503, { error: 'PRICE_API_KEY is not set.' });
+  if (!provider) return send(res, 503, { error: 'Set POKETRACE_API_KEY or PRICE_API_KEY in Vercel first.' });
 
   const started = Date.now();
   const log = { sets: [], saved: 0 };
@@ -46,8 +46,9 @@ module.exports = async (req, res) => {
       if (Date.now() - started > 45000) { stopped = 'time limit for one run'; break; }
       const name = st.names[st.idx];
       try {
+        if (provider.gapMs && log.sets.length) await new Promise((ok) => setTimeout(ok, provider.gapMs));
         const r = await provider.sealed({ set: name, limit: perSet });
-        spent += Math.max(1, r.items.length);
+        spent += r.cost || Math.max(1, r.items.length);
         log.saved += await cache.saveSealed(r.items, name);
         log.sets.push(`${name}: ${r.items.length}`);
         st.idx += 1;
