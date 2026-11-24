@@ -361,5 +361,30 @@ export async function searchEbay(q: string, sort: string, type: 'all' | 'cards',
   return call<{ items: EbayItem[]; total: number }>(`/api/ebay?${params.toString()}`);
 }
 
-/** Plain link to eBay's own search page (no key needed). */
-export const ebaySearchUrl = (q: string): string => `https://www.ebay.com/sch/i.php?_nkw=${encodeURIComponent(`pokemon ${q}`.trim())}`;
+/**
+ * Adds your eBay Partner Network tracking to an eBay link. Set EXPO_PUBLIC_EPN_CAMPAIGN_ID in Vercel to your
+ * campaign ID; without it the link is returned unchanged (a plain, untracked link).
+ */
+export function epnLink(url: string, customId?: string): string {
+  const campid = (process.env.EXPO_PUBLIC_EPN_CAMPAIGN_ID ?? '').trim();
+  if (!campid || !/^https:\/\/www\.ebay\.com\//.test(url)) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.set('mkcid', '1');
+    u.searchParams.set('mkrid', '711-53200-19255-0');
+    u.searchParams.set('campid', campid);
+    u.searchParams.set('toolid', '10001');
+    u.searchParams.set('mkevt', '1');
+    if (customId) u.searchParams.set('customid', customId.slice(0, 64));
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Link to eBay's own search page (tracked with your Partner Network ID when it is set). */
+export const ebaySearchUrl = (q: string): string =>
+  epnLink(`https://www.ebay.com/sch/i.php?_nkw=${encodeURIComponent(`pokemon ${q}`.trim())}`, 'pokeasset-search');
+
+/** Shown wherever eBay links appear. */
+export const EBAY_DISCLOSURE = 'eBay links may be affiliate links: PokéAsset can earn a commission if you buy, at no extra cost to you.';

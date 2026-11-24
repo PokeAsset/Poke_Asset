@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { colors, radius } from '../theme';
 import { Btn, Empty, Loading, PageHead, Panel, Screen, SearchBox, Segmented, Select } from '../ui';
-import { EbayItem, searchEbay } from '../server';
+import { EBAY_DISCLOSURE, EbayItem, epnLink, searchEbay } from '../server';
 import { formatMoney } from '../api';
 
 const SORTS: Record<string, string> = {
@@ -69,9 +69,9 @@ export default function EbayListings() {
               .filter(Boolean)
               .join(' · ')}
           </Text>
-          <Btn kind="gold" icon="open-outline" label="View this listing on eBay" onPress={() => Linking.openURL(picked.url).catch(() => {})} />
+          <Btn kind="gold" icon="open-outline" label="View this listing on eBay" onPress={() => Linking.openURL(epnLink(picked.url, 'pokeasset-listing')).catch(() => {})} />
           <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
-            This is eBay's listing, not a PokéAsset sale. You buy on eBay; PokéAsset does not handle payment. Price and availability can change, so check the eBay page.
+            This is eBay's listing, not a PokéAsset sale. You buy on eBay; PokéAsset does not handle payment. Price and availability can change, so check the eBay page. {EBAY_DISCLOSURE}
           </Text>
         </Panel>
       </Screen>
@@ -89,6 +89,7 @@ export default function EbayListings() {
         </View>
         <Btn kind="gold" icon="search" label={busy ? 'Searching…' : 'Search eBay'} disabled={busy || !q.trim()} onPress={() => run()} />
       </View>
+      <Text style={{ color: colors.muted, fontSize: 12 }}>{EBAY_DISCLOSURE}</Text>
       {busy ? <Loading /> : null}
       {error ? <Text style={{ color: colors.red, lineHeight: 22 }}>{error}</Text> : null}
       {!busy && items && items.length === 0 ? <Empty icon="search-outline" text="No eBay listings found. Try different words." /> : null}

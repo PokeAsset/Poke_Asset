@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
 import { Btn, Chip, Empty, Loading, PageHead, Panel, Screen, SearchBox, Segmented, Select } from '../ui';
 import { useAuth } from '../auth';
-import { tcgplayerUrl } from '../server';
+import { epnLink, tcgplayerUrl } from '../server';
 import { createReport, listListings, MarketListing, requestToBuy } from '../market';
 import { dollars, Field, StatusPill, Thumb, when } from '../marketUi';
 
@@ -115,7 +115,7 @@ function Detail({ l, onClose, onChanged }: { l: MarketListing; onClose: () => vo
       <Text style={{ color: colors.muted, fontSize: 12, letterSpacing: 1.5, fontWeight: '700' }}>COMPARE ELSEWHERE</Text>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <Btn icon="open-outline" label="TCGplayer" onPress={() => open(tcgplayerUrl(l.title))} />
-        <Btn icon="open-outline" label="eBay sold items" onPress={() => open(ebayUrl(l.title))} />
+        <Btn icon="open-outline" label="eBay sold items" onPress={() => open(epnLink(ebayUrl(l.title), 'pokeasset-sold'))} />
         {l.external_url ? <Btn icon="open-outline" label="Original link" onPress={() => open(l.external_url!)} /> : null}
       </View>
 

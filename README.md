@@ -107,3 +107,7 @@ Sealed products: Menu → Sealed products by set → pick an era → pick a set.
 ## eBay listings (update 15)
 
 Menu → Community → eBay listings (also a button on the Marketplace page). Uses eBay's official Browse API through `api/ebay.js`. Set `EBAY_CLIENT_ID` (App ID) and `EBAY_CLIENT_SECRET` (Cert ID) from the **Production** keyset in Vercel. Each listing opens on eBay; PokéAsset does not handle payment.
+
+## eBay Partner Network (affiliate links)
+
+Set `EXPO_PUBLIC_EPN_CAMPAIGN_ID` in Vercel to your EPN campaign ID (then redeploy: it is read at build time). Every eBay link in the app (search links, eBay listings, sold items) then carries `mkcid=1&mkrid=711-53200-19255-0&campid=…&toolid=10001&mkevt=1`. Without it the links are plain. A disclosure line is shown next to eBay links.

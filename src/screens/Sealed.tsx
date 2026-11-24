@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
 import { Btn, Chip, Loading, PageHead, Screen, SearchBox } from '../ui';
 import { formatDate, SetInfo } from '../api';
-import { loadSealed, searchSealed, SealedItem } from '../server';
+import { EBAY_DISCLOSURE, loadSealed, searchSealed, SealedItem } from '../server';
 import { SetBrowser } from '../setUi';
 import { SealedProducts } from '../sealedUi';
 
@@ -135,7 +135,7 @@ export function SealedSet({ route }: any) {
         />
       ) : null}
       <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 19 }}>
-        Market = the price the service reports for the product. Low = the lowest listing it reports. The chart under a product (tap its name) is recorded price history. Prices refresh about once a day at the source; pressing Refresh asks again now. If a product shows no price, use “Check on TCGplayer” to look it up there.
+        Market = the price the service reports for the product. Low = the lowest listing it reports. The chart under a product (tap its name) is recorded price history. Prices refresh about once a day at the source; pressing Refresh asks again now. If a product shows no price, use “Check on TCGplayer” to look it up there. {EBAY_DISCLOSURE}
       </Text>
     </Screen>
   );
