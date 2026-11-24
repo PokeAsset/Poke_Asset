@@ -3,6 +3,7 @@ import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, radius } from '../theme';
 import { Btn, Empty, Loading, PageHead, Panel, Screen, SearchBox, Select } from '../ui';
+import { ebaySearchUrl } from '../server';
 import { cardTcgplayerUrl, fetchSetCards, formatDate, formatMoney, marketPrice, SetInfo } from '../api';
 import { SetBrowser } from '../setUi';
 import { searchSealed, SealedItem } from '../server';
@@ -250,6 +251,9 @@ export function SetDetail({ route }: any) {
                   <Text style={{ color: colors.text, fontWeight: '700' }}>{formatMoney(marketPrice(c))}</Text>
                   <Pressable onPress={() => Linking.openURL(cardTcgplayerUrl(c)).catch(() => {})}>
                     <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '700' }}>Check on TCGplayer ↗</Text>
+                  </Pressable>
+                  <Pressable onPress={() => Linking.openURL(ebaySearchUrl(`${c.name} ${(c.number ?? '').split('/')[0]}`)).catch(() => {})}>
+                    <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '700' }}>Search on eBay ↗</Text>
                   </Pressable>
                 </Pressable>
               );

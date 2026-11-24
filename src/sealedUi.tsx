@@ -4,7 +4,7 @@ import { colors, radius } from './theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Empty, Panel, Select } from './ui';
 import { formatDate, formatMoney } from './api';
-import { SealedItem, tcgplayerUrl } from './server';
+import { ebaySearchUrl, SealedItem, tcgplayerUrl } from './server';
 import { useStore } from './store';
 import { PriceChart } from './charts';
 
@@ -156,6 +156,7 @@ export function SealedProducts({ items, setName, empty }: { items: SealedItem[];
                   <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
                     <Small text={n > 0 ? `+ Add (${n} owned)` : '+ Add'} on={n > 0} onPress={() => add(p)} />
                     <Small text="Check on TCGplayer" onPress={() => open(tcgplayerUrl(p.name))} />
+                    <Small text="Search on eBay" onPress={() => open(ebaySearchUrl(p.name))} />
                   </View>
                   {openKey === key ? (
                     <View style={{ marginTop: 6 }}>

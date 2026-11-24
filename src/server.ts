@@ -360,3 +360,6 @@ export async function searchEbay(q: string, sort: string, type: 'all' | 'cards',
   const params = new URLSearchParams({ q, sort, type, offset: String(offset) });
   return call<{ items: EbayItem[]; total: number }>(`/api/ebay?${params.toString()}`);
 }
+
+/** Plain link to eBay's own search page (no key needed). */
+export const ebaySearchUrl = (q: string): string => `https://www.ebay.com/sch/i.php?_nkw=${encodeURIComponent(`pokemon ${q}`.trim())}`;

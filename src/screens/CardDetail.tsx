@@ -8,6 +8,7 @@ import { loadFreshCards } from '../prices';
 import { fetchGraded } from '../server';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../types';
+import { ebaySearchUrl } from '../server';
 import { cardTcgplayerUrl, formatDate, formatMoney, marketPrice, priceDetail, variantList } from '../api';
 import { Chip } from '../ui';
 import { useStore } from '../store';
@@ -180,6 +181,7 @@ export default function CardDetail({ route }: any) {
           onPress={refreshNow}
         />
         <Btn icon="open-outline" label="Check price on TCGplayer" onPress={() => Linking.openURL(cardTcgplayerUrl(card)).catch(() => {})} />
+        <Btn icon="open-outline" label="Search on eBay" onPress={() => Linking.openURL(ebaySearchUrl(`${card.name} ${(card.number ?? '').split('/')[0]}`)).catch(() => {})} />
         {liveMsg.map((m) => (
           <Text key={m} style={{ color: colors.muted, fontSize: 14 }}>
             {m}
